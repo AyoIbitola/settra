@@ -18,8 +18,13 @@ class PublicInvoiceResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class CheckoutLinkResponse(BaseModel):
-    checkout_url: str
+class PaymentTargetResponse(BaseModel):
+    target_value: str            # Crypto deposit address
+    amount_expected_crypto: str  # Amount customer must send
+    expires_at: str              # ISO timestamp when the target expires
+    method: str                  # e.g. "usdc", "usdt", "btc"
+    network: str                 # e.g. "MATIC", "TRX", "BTC"
+    payment_request_id: str      # Busha payment request ID
 
     model_config = ConfigDict(from_attributes=True)
 

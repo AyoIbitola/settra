@@ -1,7 +1,8 @@
 import httpx
 from typing import Any
 
-from app.config import settings
+from app.config import settings, DEFAULT_NETWORKS
+
 
 class BushaAPIError(Exception):
     def __init__(self, message: str, status_code: int, response_data: dict):
@@ -11,18 +12,31 @@ class BushaAPIError(Exception):
         self.message = message
 
 
+# Method → (source_currency, target_currency, network) mapping
+METHOD_MAP: dict[str, tuple[str, str, str]] = {
+    "usdc": ("USDC", "USDC", DEFAULT_NETWORKS.get("usdc", "MATIC")),
+    "usdt": ("USDT", "USDT", DEFAULT_NETWORKS.get("usdt", "TRX")),
+    "btc":  ("BTC",  "BTC",  DEFAULT_NETWORKS.get("btc_onchain", "BTC")),
+}
+
+
 class BushaClient:
     """Wrapper for the Busha Business API."""
 
     def __init__(self):
         self.base_url = settings.BUSHA_BASE_URL.rstrip('/')
-        self.secret_key = settings.BUSHA_SECRET_KEY
-        
-        # Remove any surrounding quotes that might have been copied from .env
-        self.secret_key = self.secret_key.strip('"').strip("'")
-        
+        self.secret_key = settings.BUSHA_SECRET_KEY.strip('"').strip("'")
+        self.public_key = settings.BUSHA_PUBLIC_KEY.strip('"').strip("'")
+
+        # Secret-key headers (for admin endpoints like currencies)
         self.headers = {
             "Authorization": f"Bearer {self.secret_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        # Public-key headers (for customer-facing Payment Requests)
+        self.public_headers = {
+            "X-BU-PUBLIC-KEY": self.public_key,
             "Content-Type": "application/json",
             "Accept": "application/json"
         }
@@ -38,49 +52,49 @@ class BushaClient:
         await self._handle_response(response)
         return response.json()
 
-    async def create_one_time_payment_link(
+    async def create_payment_request(
         self,
-        name: str,
-        title: str,
-        description: str,
+        method: str,
         quote_amount: str,
-        quote_currency: str,
-        target_currency: str,
         customer_email: str,
+        reference: str,
     ) -> dict[str, Any]:
-        """Create a new one-time payment link per PRD 5.2."""
+        """
+        Create a Payment Request per Busha docs.
+        Uses the Public API Key and returns a crypto deposit address.
+        """
+        if method not in METHOD_MAP:
+            raise BushaAPIError(f"Unsupported method: {method}", 400, {})
+
+        source_currency, target_currency, network = METHOD_MAP[method]
+
         payload = {
-            "fixed": True,
-            "one_time": True,
-            "name": name,
-            "title": title,
-            "description": description or "",
-            "quote_amount": float(quote_amount),
-            "quote_currency": quote_currency,
+            "quote_amount": str(quote_amount),
+            "quote_currency": "USD",
+            "source_currency": source_currency,
             "target_currency": target_currency,
+            "pay_in": {
+                "type": "address",
+                "network": network,
+            },
+            "additional_info": {
+                "email": customer_email,
+            },
+            "reference": reference,
         }
-        response = await self.client.post("/v1/payments/links", json=payload)
+
+        # Use public-key headers for this request
+        response = await self.client.post(
+            "/v1/payments/requests",
+            json=payload,
+            headers=self.public_headers,
+        )
         await self._handle_response(response)
         return response.json()
 
-    async def create_payment_request_for_link(
-        self,
-        link_id: str,
-        customer_email: str,
-        source_currency: str,
-        network: str,
-    ) -> dict[str, Any]:
-        """Create a payment request against an existing link per PRD 5.2."""
-        payload = {
-            "source_currency": source_currency,
-            "network": network,
-            "type": "crypto",
-            "payment_method": "crypto",
-            "requested_info": {
-                "email": customer_email
-            }
-        }
-        response = await self.client.post(f"/v1/payments/links/{link_id}/requests", json=payload)
+    async def get_payment_request(self, request_id: str) -> dict[str, Any]:
+        """Retrieve a payment request by ID."""
+        response = await self.client.get(f"/v1/payments/requests/{request_id}")
         await self._handle_response(response)
         return response.json()
 
@@ -92,11 +106,11 @@ class BushaClient:
                 err_data = response.json()
             except Exception:
                 err_data = {"raw": response.text}
-            
+
             message = err_data.get("message", "Unknown error")
             if "error" in err_data and isinstance(err_data["error"], dict):
                 message = err_data["error"].get("message", message)
-                
+
             raise BushaAPIError(message, response.status_code, err_data)
 
     async def close(self):

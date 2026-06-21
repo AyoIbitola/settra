@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import PaymentTargetGenerationError
 from app.db import get_session
 from app.models.invoice import InvoiceStatus
-from app.schemas.public import CheckoutLinkResponse, PublicInvoiceResponse, PublicInvoiceStatusResponse
+from app.schemas.public import PaymentTargetResponse, PublicInvoiceResponse, PublicInvoiceStatusResponse
 from app.services.invoice_service import InvoiceService
 
 router = APIRouter(prefix="/public/invoices", tags=["Public"])
@@ -55,21 +55,22 @@ async def get_payment_methods(
     return ["usdc", "usdt", "btc", "lightning"]
 
 
-@router.post("/{invoice_id}/checkout-link", response_model=CheckoutLinkResponse)
+@router.post("/{invoice_id}/payment-target", response_model=PaymentTargetResponse)
 @limiter.limit("10/minute")
-async def create_checkout_link(
+async def create_payment_target(
     request: Request,
     invoice_id: uuid.UUID,
     method: str = Query(..., description="Payment method: usdc | usdt | btc"),
     db: AsyncSession = Depends(get_session),
 ):
     """
-    Generate or retrieve a Busha checkout URL for an invoice.
+    Generate a Busha Payment Request for an invoice.
+    Returns crypto deposit address, amount, and expiry.
     Rate-limited to 10/min per IP.
     """
     try:
-        checkout_url = await InvoiceService.get_checkout_link(db=db, invoice_id=invoice_id, method=method)
-        return CheckoutLinkResponse(checkout_url=checkout_url)
+        target = await InvoiceService.generate_payment_target(db=db, invoice_id=invoice_id, method=method)
+        return PaymentTargetResponse(**target)
     except PaymentTargetGenerationError as e:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))
     except HTTPException:

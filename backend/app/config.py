@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     #   Production: [CONFIRM from dashboard — see PRD Section 16 item 6]
     BUSHA_BASE_URL: str
     BUSHA_SECRET_KEY: str = ""
+    BUSHA_PUBLIC_KEY: str = ""
     BUSHA_WEBHOOK_SECRET: str = ""
 
     # Auth

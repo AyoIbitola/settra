@@ -98,16 +98,16 @@ class InvoiceService:
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def get_checkout_link(
+    async def generate_payment_target(
         db: AsyncSession, invoice_id: uuid.UUID, method: str
-    ) -> str:
-        """Returns a Busha Checkout URL. Updates invoice with the link_id."""
-        from app.services.busha_client import BushaClient
+    ) -> dict:
+        """Creates a Busha Payment Request and returns the crypto deposit info."""
+        from app.services.busha_client import BushaClient, METHOD_MAP
 
-        if method not in ["usdc", "usdt", "btc"]:
+        if method not in METHOD_MAP:
             raise HTTPException(status_code=400, detail="Unsupported payment method")
 
-        # 1. Load invoice with lock to prevent concurrent link generation
+        # 1. Load invoice with lock to prevent concurrent target generation
         result = await db.execute(
             select(Invoice)
             .options(joinedload(Invoice.user))
@@ -119,7 +119,7 @@ class InvoiceService:
             raise HTTPException(status_code=404, detail="Invoice not found")
 
         if invoice.status not in [InvoiceStatus.DRAFT, InvoiceStatus.PENDING, InvoiceStatus.PARTIALLY_PAID]:
-            raise HTTPException(status_code=409, detail=f"Cannot generate link for invoice in {invoice.status.value} state")
+            raise HTTPException(status_code=409, detail=f"Cannot generate target for invoice in {invoice.status.value} state")
 
         # 2a. If draft, transition to pending
         if invoice.status == InvoiceStatus.DRAFT:
@@ -132,29 +132,37 @@ class InvoiceService:
             if amount_to_quote_usd <= 0:
                 raise HTTPException(status_code=409, detail="Invoice is completely paid")
 
-        # Normalize method to Busha currency code (BTC, USDC, USDT)
-        target_currency = method.upper()
-
-        # 3. Call Busha to create a link
+        # 3. Call Busha Payment Requests API
+        reference = f"{invoice.busha_reference}_{method}_{uuid.uuid4().hex[:8]}"
         async with BushaClient() as client:
-            link_data = await client.create_one_time_payment_link(
-                name=f"Invoice {invoice.busha_reference}",
-                title=f"Invoice {invoice.client_name}",
-                description=invoice.description or "",
+            resp = await client.create_payment_request(
+                method=method,
                 quote_amount=str(amount_to_quote_usd),
-                quote_currency="USD",
-                target_currency=target_currency,
                 customer_email=invoice.client_email,
+                reference=reference,
             )
 
-        link_id = link_data.get("data", {}).get("id")
-        if not link_id:
-            raise HTTPException(status_code=502, detail="Failed to retrieve link ID from Busha")
+        data = resp.get("data", {})
+        pay_in = data.get("pay_in", {})
 
-        # 4. Save link_id on invoice (overwrites if they picked a new currency)
-        invoice.busha_link_id = link_id
+        payment_request_id = data.get("id")
+        if not payment_request_id:
+            raise HTTPException(status_code=502, detail="Failed to get payment request ID from Busha")
+
+        # 4. Save the payment request ID on invoice
+        invoice.busha_link_id = payment_request_id
         db.add(invoice)
         await db.commit()
 
-        # 5. Return Checkout URL
-        return f"https://pay.busha.co/{link_id}"
+        source_currency, target_currency, network = METHOD_MAP[method]
+
+        # 5. Return the payment target info
+        return {
+            "target_value": pay_in.get("address", ""),
+            "amount_expected_crypto": data.get("source_amount", ""),
+            "expires_at": pay_in.get("expires_at") or data.get("expires_at", ""),
+            "method": method,
+            "network": network,
+            "payment_request_id": payment_request_id,
+        }
+
