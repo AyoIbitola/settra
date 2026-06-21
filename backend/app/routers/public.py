@@ -170,4 +170,9 @@ async def get_public_invoice_receipt(
     if not receipt.pdf_path.startswith("http"):
         raise HTTPException(status_code=404, detail="Receipt file not available remotely.")
 
-    return RedirectResponse(url=receipt.pdf_path)
+    from app.services.s3_service import S3Service
+    try:
+        presigned_url = S3Service.generate_presigned_url(receipt.pdf_path, expiration=3600)
+        return RedirectResponse(url=presigned_url)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to generate download link")
