@@ -112,7 +112,7 @@ class InvoiceService:
             select(Invoice)
             .options(joinedload(Invoice.user))
             .where(Invoice.id == invoice_id)
-            .with_for_update()
+            .with_for_update(of=Invoice)
         )
         invoice = result.scalar_one_or_none()
         if not invoice:
