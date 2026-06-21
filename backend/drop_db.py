@@ -8,10 +8,13 @@ async def main():
     async with engine.begin() as conn:
         await conn.execute(text("DROP TABLE IF EXISTS payments CASCADE;"))
         await conn.execute(text("DROP TABLE IF EXISTS payment_targets CASCADE;"))
+        await conn.execute(text("DROP TABLE IF EXISTS overpayment_credits CASCADE;"))
+        await conn.execute(text("DROP TABLE IF EXISTS webhook_events CASCADE;"))
         await conn.execute(text("DROP TABLE IF EXISTS invoices CASCADE;"))
         await conn.execute(text("DROP TABLE IF EXISTS users CASCADE;"))
         await conn.execute(text("DROP TABLE IF EXISTS alembic_version CASCADE;"))
         await conn.execute(text("DROP TYPE IF EXISTS invoice_status CASCADE;"))
+        await conn.execute(text("DROP TYPE IF EXISTS overpayment_status CASCADE;"))
     await engine.dispose()
 
 asyncio.run(main())

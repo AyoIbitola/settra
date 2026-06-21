@@ -2,7 +2,6 @@
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -53,7 +52,6 @@ async def health(request: Request):
     Health check — verifies DB and Redis connectivity.
     Required by hosting platforms (Railway, Render, Fly.io) for process supervision.
     """
-    import asyncio
     from app.db import async_session_factory
     from sqlalchemy import text
     import redis.asyncio as aioredis

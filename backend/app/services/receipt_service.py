@@ -43,8 +43,12 @@ class ReceiptService:
                     "tx_hash": payment.tx_hash,
                     "amount_crypto": payment.amount_received_crypto,
                     "amount_usd": payment.amount_received_usd_equiv,
-                    # PRD 11.2: Compute explorer link
-                    "explorer_link": f"https://polygonscan.com/tx/{payment.tx_hash}" if payment.method in ["usdc", "usdt"] else f"https://mempool.space/tx/{payment.tx_hash}"
+                    # Choose blockchain explorer link based on method
+                    "explorer_link": (
+                        f"https://tronscan.org/#/transaction/{payment.tx_hash}" if payment.method == "usdt"
+                        else f"https://etherscan.io/tx/{payment.tx_hash}" if payment.method == "usdc"
+                        else f"https://mempool.space/tx/{payment.tx_hash}"  # BTC
+                    )
                 }
         else:
             # Fallback if no specific payment provided (e.g., aggregate receipt)
@@ -63,7 +67,7 @@ class ReceiptService:
         # Render HTML
         html_out = template.render(
             business_name=invoice.user.business_name if invoice.user else "Freelancer",
-            invoice_reference=invoice.bitnob_reference,
+            invoice_reference=invoice.busha_reference,
             timestamp=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
             client_name=invoice.client_name,
             description=invoice.description or "Invoice Payment",
@@ -71,7 +75,7 @@ class ReceiptService:
         )
 
         # Generate unique object key for S3
-        filename = f"receipts/{invoice.bitnob_reference}_{uuid.uuid4().hex[:6]}.pdf"
+        filename = f"receipts/{invoice.busha_reference}_{uuid.uuid4().hex[:6]}.pdf"
 
         # WeasyPrint PDF generation -> Memory bytes
         pdf_bytes = HTML(string=html_out).write_pdf()

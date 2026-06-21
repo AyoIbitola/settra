@@ -1,7 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
-from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
@@ -19,13 +18,8 @@ class PublicInvoiceResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class PaymentTargetResponse(BaseModel):
-    target_value: str
-    amount_expected_crypto: Decimal
-    rate_locked_usd_to_crypto: Decimal
-    expires_at: datetime
-    method: str
-    network: Optional[str]
+class CheckoutLinkResponse(BaseModel):
+    checkout_url: str
 
     model_config = ConfigDict(from_attributes=True)
 

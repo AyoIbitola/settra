@@ -20,20 +20,20 @@ from app.models import Base
 
 
 class InvoiceStatus(str, enum.Enum):
-    """Invoice lifecycle states — see PRD Section 4.2.1 for full state machine."""
+    """Invoice lifecycle states — PRD Section 4.2.1. See state machine there for allowed transitions."""
 
-    DRAFT = "draft"
-    PENDING = "pending"
-    PARTIALLY_PAID = "partially_paid"
-    PAID = "paid"
-    OVERPAID = "overpaid"
-    EXPIRED = "expired"
-    CANCELLED = "cancelled"
-    REFUNDED = "refunded"
+    DRAFT = "draft"                  # created, no payment target generated yet
+    PENDING = "pending"              # payment target generated, awaiting payment
+    PARTIALLY_PAID = "partially_paid"  # some funds received, less than expected
+    PAID = "paid"                    # funds received within tolerance of expected
+    OVERPAID = "overpaid"            # funds received exceed expected beyond tolerance
+    EXPIRED = "expired"              # payment target/rate lock expired with zero payment
+    CANCELLED = "cancelled"          # freelancer manually cancelled
+    REFUNDED = "refunded"            # manual refund recorded (v1: record-keeping only)
 
 
-def _generate_bitnob_reference() -> str:
-    """Generate a unique Bitnob reference like INV_<short uuid>."""
+def _generate_busha_reference() -> str:
+    """Generate a unique Busha reference like INV_<short uuid>."""
     return f"INV_{uuid.uuid4().hex[:12].upper()}"
 
 
@@ -58,12 +58,21 @@ class Invoice(Base):
         nullable=False,
         default=InvoiceStatus.DRAFT,
     )
-    bitnob_reference: Mapped[str] = mapped_column(
-        String, unique=True, nullable=False, default=_generate_bitnob_reference
+    # Passed to Busha wherever a reference field is accepted.
+    # Also used to correlate incoming webhooks back to this invoice.
+    busha_reference: Mapped[str] = mapped_column(
+        String, unique=True, nullable=False, default=_generate_busha_reference
     )
+    # The Busha one-time payment link ID (created lazily on first payment target request).
+    # Nullable until the link is created. PRD Section 4.2.
+    busha_link_id: Mapped[str | None] = mapped_column(
+        String, unique=True, nullable=True, default=None
+    )
+    # Running total in USD-equivalent — only recalculated by ReconciliationService.
     amount_received_usd_equiv: Mapped[Decimal] = mapped_column(
         Numeric(12, 2), nullable=False, default=Decimal("0")
     )
+    # Only non-zero when status = overpaid.
     overpaid_amount_usd: Mapped[Decimal] = mapped_column(
         Numeric(12, 2), nullable=False, default=Decimal("0")
     )
@@ -85,5 +94,6 @@ class Invoice(Base):
 
     __table_args__ = (
         Index("idx_invoices_user_id", "user_id"),
+        Index("idx_invoices_busha_reference", "busha_reference", unique=True),
         Index("idx_invoices_status", "status"),
     )

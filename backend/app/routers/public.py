@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import PaymentTargetGenerationError
 from app.db import get_session
 from app.models.invoice import InvoiceStatus
-from app.schemas.public import PaymentTargetResponse, PublicInvoiceResponse, PublicInvoiceStatusResponse
+from app.schemas.public import CheckoutLinkResponse, PublicInvoiceResponse, PublicInvoiceStatusResponse
 from app.services.invoice_service import InvoiceService
 
 router = APIRouter(prefix="/public/invoices", tags=["Public"])
@@ -55,21 +55,21 @@ async def get_payment_methods(
     return ["usdc", "usdt", "btc", "lightning"]
 
 
-@router.post("/{invoice_id}/payment-target", response_model=PaymentTargetResponse)
+@router.post("/{invoice_id}/checkout-link", response_model=CheckoutLinkResponse)
 @limiter.limit("10/minute")
-async def generate_payment_target(
+async def create_checkout_link(
     request: Request,
     invoice_id: uuid.UUID,
-    method: str = Query(..., description="Payment method: usdc | usdt | btc | lightning"),
+    method: str = Query(..., description="Payment method: usdc | usdt | btc"),
     db: AsyncSession = Depends(get_session),
 ):
     """
-    Generate or retrieve a payment target (crypto address / BOLT11 invoice) for an invoice.
-    Rate-limited to 10/min per IP — prevents address farming.
+    Generate or retrieve a Busha checkout URL for an invoice.
+    Rate-limited to 10/min per IP.
     """
     try:
-        target = await InvoiceService.generate_payment_target(db=db, invoice_id=invoice_id, method=method)
-        return target
+        checkout_url = await InvoiceService.get_checkout_link(db=db, invoice_id=invoice_id, method=method)
+        return CheckoutLinkResponse(checkout_url=checkout_url)
     except PaymentTargetGenerationError as e:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))
     except HTTPException:
@@ -93,8 +93,6 @@ async def get_invoice_status(
     if not invoice:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found")
 
-    target = await InvoiceService.get_active_payment_target(db=db, invoice_id=invoice_id)
-
     remaining = None
     if invoice.status == InvoiceStatus.PARTIALLY_PAID:
         remaining = invoice.amount_usd - invoice.amount_received_usd_equiv
@@ -104,7 +102,7 @@ async def get_invoice_status(
         amount_received_usd_equiv=invoice.amount_received_usd_equiv,
         remaining_usd=remaining,
         overpaid_amount_usd=invoice.overpaid_amount_usd,
-        active_target_expires_at=target.expires_at if target else None,
+        active_target_expires_at=None,
     )
 
 
@@ -116,8 +114,6 @@ async def get_public_invoice_receipt(
     db: Annotated[AsyncSession, Depends(get_session)],
 ):
     """Get the generated PDF receipt if it exists."""
-    import os
-    from fastapi.responses import FileResponse
     from sqlalchemy import select
     from app.models.receipt import Receipt
 

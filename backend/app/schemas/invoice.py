@@ -24,7 +24,7 @@ class InvoiceResponse(BaseModel):
     description: Optional[str]
     amount_usd: Decimal
     status: InvoiceStatus
-    bitnob_reference: str
+    busha_reference: str
     amount_received_usd_equiv: Decimal
     overpaid_amount_usd: Decimal
     due_date: Optional[date]
