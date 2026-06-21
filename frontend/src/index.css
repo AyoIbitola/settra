@@ -40,8 +40,9 @@
 
 @layer base {
   body {
-    @apply bg-ink text-silver font-body antialiased;
-    background-color: var(--color-ink);
+    @apply bg-ink text-silver font-body antialiased selection:bg-signal/30 selection:text-white;
+    background-image: radial-gradient(circle at 50% -20%, rgba(255, 255, 255, 0.06) 0%, transparent 70%);
+    background-attachment: fixed;
   }
 
   h1, h2, h3, h4, h5, h6 {

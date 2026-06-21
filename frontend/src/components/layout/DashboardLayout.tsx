@@ -31,14 +31,14 @@ export function DashboardLayout() {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed lg:sticky top-0 left-0 z-50 h-screen w-64 bg-ink-raised border-r border-line flex flex-col transition-transform duration-200",
+          "fixed lg:sticky top-0 left-0 z-50 h-screen w-64 bg-ink/70 backdrop-blur-3xl border-r border-white/5 shadow-[4px_0_24px_rgba(0,0,0,0.4)] flex flex-col transition-transform duration-300",
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
       >
         {/* Logo */}
-        <div className="p-6 border-b border-line flex items-center justify-between">
-          <span className="text-white font-display text-xl font-bold tracking-tight">Settra</span>
-          <button className="lg:hidden text-silver-dim hover:text-white" onClick={() => setSidebarOpen(false)}>
+        <div className="p-6 border-b border-white/[0.04] flex items-center justify-between">
+          <span className="text-white font-display text-2xl font-bold tracking-tighter" style={{ textShadow: "0 2px 10px rgba(255,255,255,0.15)" }}>Settra<span className="text-signal">.</span></span>
+          <button className="lg:hidden text-silver-dim hover:text-white transition-colors" onClick={() => setSidebarOpen(false)}>
             <X size={20} />
           </button>
         </div>
@@ -53,10 +53,10 @@ export function DashboardLayout() {
               onClick={() => setSidebarOpen(false)}
               className={({ isActive }) =>
                 cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-md text-body-sm font-medium transition-colors",
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-body-sm font-medium transition-all duration-200",
                   isActive
-                    ? "bg-white/5 text-white"
-                    : "text-silver-dim hover:text-white hover:bg-white/[0.03]"
+                    ? "bg-white/10 text-white shadow-sm ring-1 ring-white/10"
+                    : "text-silver-dim hover:text-white hover:bg-white/[0.04]"
                 )
               }
             >
@@ -67,16 +67,16 @@ export function DashboardLayout() {
         </nav>
 
         {/* User menu */}
-        <div className="p-4 border-t border-line space-y-3">
+        <div className="p-4 border-t border-white/[0.04] bg-gradient-to-t from-black/20 to-transparent space-y-3">
           <div className="px-3">
             <p className="text-body-sm text-white font-medium truncate">{user?.business_name || "My Business"}</p>
-            <p className="text-[11px] text-silver-dim truncate">{user?.email || ""}</p>
+            <p className="text-[11px] text-silver-dim/80 truncate">{user?.email || ""}</p>
           </div>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-2 px-3 py-2 w-full rounded-md text-body-sm text-silver-dim hover:text-white hover:bg-white/[0.03] transition-colors"
+            className="flex items-center gap-2 px-3 py-2 w-full rounded-lg text-body-sm text-silver-dim hover:text-white hover:bg-white/[0.05] transition-all duration-200 group"
           >
-            <LogOut size={16} />
+            <LogOut size={16} className="group-hover:translate-x-1 transition-transform" />
             Sign out
           </button>
         </div>

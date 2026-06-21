@@ -1,10 +1,10 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import type { ReactNode } from "react";
 import { login as apiLogin, register as apiRegister, getMe, logout as apiLogout } from "../api/auth";
-import type { AuthResponse } from "../api/types";
+import type { UserResponse } from "../api/types";
 
 interface AuthContextType {
-  user: AuthResponse["user"] | null;
+  user: UserResponse | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
@@ -16,7 +16,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthResponse["user"] | null>(null);
+  const [user, setUser] = useState<UserResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,8 +35,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     setError(null);
     try {
-      const res = await apiLogin(email, password);
-      setUser(res.user);
+      const u = await apiLogin(email, password);
+      setUser(u);
     } catch (err: any) {
       setError(err.message || "Login failed");
       throw err;
@@ -46,8 +46,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = useCallback(async (email: string, businessName: string, password: string) => {
     setError(null);
     try {
-      const res = await apiRegister(email, businessName, password);
-      setUser(res.user);
+      const u = await apiRegister(email, businessName, password);
+      setUser(u);
     } catch (err: any) {
       setError(err.message || "Registration failed");
       throw err;

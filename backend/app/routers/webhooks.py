@@ -1,5 +1,12 @@
+"""
+Webhook receiver for Busha payment notifications.
+PRD Section 8 — fast-ack, HMAC-SHA256 (base64) signature verification,
+dedup via composite key, hand-off to Celery.
+"""
+import base64
 import hashlib
 import hmac
+import logging
 
 from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import select
@@ -7,56 +14,64 @@ from sqlalchemy import select
 from app.config import settings
 from app.db import get_session
 from app.models.webhook_event import WebhookEvent
-
-# NOTE: The import below assumes celery is running and tasks are available.
-# We will use .delay() to trigger Celery.
 from app.workers.tasks import process_webhook_event
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Webhooks"])
 
-@router.post("/webhooks/bitnob")
-async def bitnob_webhook(request: Request):
+
+@router.post("/webhooks/busha")
+async def busha_webhook(request: Request):
     """
-    Fast-ack webhook receiver for Bitnob.
-    Verifies HMAC-SHA512 signature, dedupes, persists event, and hands off to Celery.
+    Fast-ack webhook receiver for Busha.
+    Verifies HMAC-SHA256 (base64-encoded) signature, dedupes via composite key,
+    persists raw event row, and hands off to Celery — all synchronous work done
+    before returning 200 is intentionally minimal.
     """
     raw_body = await request.body()
-    signature = request.headers.get("x-bitnob-signature", "")
+    signature = request.headers.get("x-bu-signature", "")
 
-    if not settings.BITNOB_WEBHOOK_SECRET:
+    if not settings.BUSHA_WEBHOOK_SECRET:
+        logger.error("BUSHA_WEBHOOK_SECRET is not configured.")
         raise HTTPException(status_code=500, detail="Webhook secret not configured")
 
-    expected = hmac.new(
-        settings.BITNOB_WEBHOOK_SECRET.encode("utf-8"),
+    # PRD §8.2: HMAC-SHA256 over the raw bytes, base64-encoded (NOT hex).
+    mac = hmac.new(
+        settings.BUSHA_WEBHOOK_SECRET.encode("utf-8"),
         raw_body,
-        hashlib.sha512,
-    ).hexdigest()
+        hashlib.sha256,
+    )
+    expected = base64.b64encode(mac.digest()).decode()
 
-    # Constant-time comparison
+    # Constant-time comparison — prevents timing-side-channel attacks.
     if not hmac.compare_digest(expected, signature):
         raise HTTPException(status_code=401, detail="Invalid signature")
 
     payload = await request.json()
     event_type = payload.get("event")
     data = payload.get("data", {})
-    
-    # Confirm field name consistency: Check event_id then fallback to id
-    event_id = data.get("event_id") or data.get("id")
 
-    if not event_id:
-        # Cannot deduplicate without an ID. We ack to prevent infinite retries.
-        return {"status": "ok", "detail": "Missing event ID, ignored."}
+    # PRD §8.1: composite dedup key — no single canonical event_id in Busha payloads.
+    object_id = data.get("id")
+    timestamp = data.get("updated_at") or data.get("created_at")
 
-    # Use a fresh context manager for DB
+    if not object_id:
+        logger.warning("Busha webhook received with no data.id — cannot deduplicate. Acking to prevent retries.")
+        return {"status": "ok"}
+
+    dedup_key = f"{object_id}:{event_type}:{timestamp}"
+
     async for db in get_session():
         existing = await db.execute(
-            select(WebhookEvent).where(WebhookEvent.event_id == event_id)
+            select(WebhookEvent).where(WebhookEvent.event_dedup_key == dedup_key)
         )
         if existing.scalar_one_or_none() is not None:
-            return {"status": "ok"}  # already processed, ack without reprocessing
+            logger.info(f"Duplicate webhook ignored: {dedup_key}")
+            return {"status": "ok"}
 
         webhook_row = WebhookEvent(
-            event_id=event_id,
+            event_dedup_key=dedup_key,
             event_type=event_type,
             raw_payload=payload,
             signature_valid=True,
@@ -65,7 +80,8 @@ async def bitnob_webhook(request: Request):
         await db.commit()
         await db.refresh(webhook_row)
 
-        # Hand off to Celery processing queue.
+        # Hand off to Celery — do not process synchronously.
         process_webhook_event.delay(str(webhook_row.id))
+        logger.info(f"Busha webhook '{event_type}' queued. dedup_key={dedup_key}")
 
-        return {"status": "ok"}
+    return {"status": "ok"}

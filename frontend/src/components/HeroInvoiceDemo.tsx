@@ -20,6 +20,13 @@ export function HeroInvoiceDemo() {
   useEffect(() => {
     if (!cardRef.current) return;
 
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReducedMotion) {
+      setBeat(3);
+      setTriggerHash(1);
+      return;
+    }
+
     const ctx = gsap.context(() => {
       const tl = gsap.timeline({ repeat: -1, repeatDelay: 1 });
 

@@ -68,8 +68,6 @@ async def get_invoice_receipt(
     """
     Get the generated PDF receipt for the owner.
     """
-    import os
-    from fastapi.responses import FileResponse
     from sqlalchemy import select
     from app.models.receipt import Receipt
 
@@ -143,7 +141,6 @@ async def resend_invoice(
     Re-send the payment link email to the client.
     Rate-limited to 1 call per 5 minutes per invoice to prevent abuse.
     """
-    import time
     import redis as redis_lib
     from app.config import settings
     from app.workers.tasks import send_email
@@ -176,7 +173,7 @@ async def resend_invoice(
     send_email.delay(
         template_id="payment_link",
         recipient=invoice.client_email,
-        subject=f"Payment link for invoice {invoice.bitnob_reference}",
+        subject=f"Payment link for invoice {invoice.busha_reference}",
         data={
             "client_name": invoice.client_name,
             "amount_usd": str(invoice.amount_usd),

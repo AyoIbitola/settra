@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Sequence
 
@@ -8,20 +8,15 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from app.core.exceptions import InvalidStateTransitionError
 from app.models.invoice import Invoice, InvoiceStatus
 from app.models.payment_target import PaymentTarget
 from app.schemas.invoice import InvoiceCreateRequest
-from app.services.bitnob_client import BitnobClient
-
-
 class InvoiceService:
     @staticmethod
     async def create_invoice(
         db: AsyncSession, user_id: uuid.UUID, data: InvoiceCreateRequest
     ) -> Invoice:
         # Create a new draft invoice.
-        # Generate a unique bitnob_reference using uuid4
         temp_reference = f"INV_{uuid.uuid4().hex[:16].upper()}"
 
         invoice = Invoice(
@@ -31,7 +26,7 @@ class InvoiceService:
             description=data.description,
             amount_usd=data.amount_usd,
             status=InvoiceStatus.DRAFT,
-            bitnob_reference=temp_reference,
+            busha_reference=temp_reference,
             amount_received_usd_equiv=Decimal("0.00"),
             overpaid_amount_usd=Decimal("0.00"),
             due_date=data.due_date,
@@ -96,22 +91,23 @@ class InvoiceService:
         result = await db.execute(
             select(PaymentTarget).where(
                 PaymentTarget.invoice_id == invoice_id,
-                PaymentTarget.is_active == True,
+                PaymentTarget.is_active,
                 PaymentTarget.expires_at > now,
             )
         )
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def generate_payment_target(
+    async def get_checkout_link(
         db: AsyncSession, invoice_id: uuid.UUID, method: str
-    ) -> PaymentTarget:
-        """Implements PRD 7.3.1 - Generate payment target for invoice."""
-        
-        if method not in ["usdc", "usdt", "btc", "lightning"]:
+    ) -> str:
+        """Returns a Busha Checkout URL. Updates invoice with the link_id."""
+        from app.services.busha_client import BushaClient
+
+        if method not in ["usdc", "usdt", "btc"]:
             raise HTTPException(status_code=400, detail="Unsupported payment method")
 
-        # 1. Load invoice with lock to prevent concurrent target generation
+        # 1. Load invoice with lock to prevent concurrent link generation
         result = await db.execute(
             select(Invoice)
             .options(joinedload(Invoice.user))
@@ -122,135 +118,43 @@ class InvoiceService:
         if not invoice:
             raise HTTPException(status_code=404, detail="Invoice not found")
 
-        if invoice.status not in [InvoiceStatus.DRAFT, InvoiceStatus.PENDING, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.EXPIRED]:
-            raise HTTPException(status_code=409, detail=f"Cannot generate payment target for invoice in {invoice.status.value} state")
+        if invoice.status not in [InvoiceStatus.DRAFT, InvoiceStatus.PENDING, InvoiceStatus.PARTIALLY_PAID]:
+            raise HTTPException(status_code=409, detail=f"Cannot generate link for invoice in {invoice.status.value} state")
 
-        now = datetime.now(timezone.utc)
-
-        # 2. Check for existing active payment target
-        existing_result = await db.execute(
-            select(PaymentTarget).where(
-                PaymentTarget.invoice_id == invoice.id,
-                PaymentTarget.method == method,
-                PaymentTarget.is_active == True,
-                PaymentTarget.expires_at > now,
-            )
-        )
-        active_target = existing_result.scalar_one_or_none()
-        if active_target:
-            return active_target
-
-        # 3a. If draft, transition to pending
+        # 2a. If draft, transition to pending
         if invoice.status == InvoiceStatus.DRAFT:
             invoice.status = InvoiceStatus.PENDING
-            db.add(invoice)
 
-        # 3b. Determine amount to quote
-        if invoice.status in [InvoiceStatus.PENDING, InvoiceStatus.DRAFT, InvoiceStatus.EXPIRED]:
-            amount_to_quote_usd = invoice.amount_usd
-        elif invoice.status == InvoiceStatus.PARTIALLY_PAID:
+        # 2b. Determine amount to quote
+        amount_to_quote_usd = invoice.amount_usd
+        if invoice.status == InvoiceStatus.PARTIALLY_PAID:
             amount_to_quote_usd = invoice.amount_usd - invoice.amount_received_usd_equiv
             if amount_to_quote_usd <= 0:
                 raise HTTPException(status_code=409, detail="Invoice is completely paid")
-        else:
-            raise HTTPException(status_code=409, detail="Unexpected invoice status")
 
-        # 3c-d. Bitnob integration
-        client = BitnobClient()
-        try:
-            # Determine correct API rate mapping and request type
-            bitnob_raw = {}
-            target_value = ""
-            network = method
+        # Normalize method to Busha currency code (BTC, USDC, USDT)
+        target_currency = method.upper()
 
-            if method in ["usdc", "usdt"]:
-                rate_response = await client.get_exchange_rate("USD", method.upper())
-                rate_data = rate_response.get("data", {})
-                rate_locked = Decimal(str(rate_data.get("sell_rate", "1.00")))
-                amount_expected_crypto = amount_to_quote_usd * rate_locked
-
-                network = "polygon"
-                address_res = await client.generate_address(
-                    chain=network,
-                    customer_email=invoice.client_email,
-                    reference=f"{invoice.bitnob_reference}-{int(now.timestamp())}"
-                )
-                target_value = address_res.get("data", {}).get("address")
-                bitnob_raw = address_res.get("data", {})
-
-            elif method == "btc":
-                rate_response = await client.get_exchange_rate("USD", "BTC")
-                rate_data = rate_response.get("data", {})
-                # E.g. Bitnob returns 1 USD = 0.000015 BTC in sell_rate
-                rate_locked = Decimal(str(rate_data.get("sell_rate", "0.000015")))
-                amount_expected_crypto = amount_to_quote_usd * rate_locked
-
-                network = "bitcoin"
-                address_res = await client.generate_btc_address(
-                    customer_email=invoice.client_email,
-                    label=f"Invoice {invoice.bitnob_reference}"
-                )
-                # Fallback data extraction considering standard formats
-                data_obj = address_res.get("data", address_res)
-                target_value = data_obj.get("address")
-                bitnob_raw = data_obj
-
-            elif method == "lightning":
-                rate_response = await client.get_exchange_rate("USD", "BTC")
-                rate_data = rate_response.get("data", {})
-                rate_locked = Decimal(str(rate_data.get("sell_rate", "0.000015")))
-                
-                amount_expected_btc = amount_to_quote_usd * rate_locked
-                satoshis = int(amount_expected_btc * Decimal("100000000"))
-                amount_expected_crypto = Decimal(str(satoshis))
-
-                network = "lightning"
-                ln_res = await client.create_lightning_invoice(
-                    satoshis=satoshis,
-                    description=f"Invoice {invoice.bitnob_reference}",
-                    reference=f"{invoice.bitnob_reference}-{int(now.timestamp())}"
-                )
-                data_obj = ln_res.get("data", ln_res)
-                target_value = data_obj.get("paymentRequest") or data_obj.get("payment_request") or data_obj.get("request")
-                bitnob_raw = data_obj
-
-            if not target_value:
-                raise HTTPException(status_code=502, detail=f"Invalid payload/address returned by upstream for {method}")
-            
-        finally:
-            await client.close()
-
-        # 3e. Mark old targets inactive
-        await db.execute(
-            select(PaymentTarget).where(
-                PaymentTarget.invoice_id == invoice.id,
-                PaymentTarget.method == method,
-                PaymentTarget.is_active == True,
+        # 3. Call Busha to create a link
+        async with BushaClient() as client:
+            link_data = await client.create_one_time_payment_link(
+                name=f"Invoice {invoice.busha_reference}",
+                title=f"Invoice {invoice.client_name}",
+                description=invoice.description or "",
+                quote_amount=str(amount_to_quote_usd),
+                quote_currency="USD",
+                target_currency=target_currency,
+                customer_email=invoice.client_email,
             )
-        )
-        # Using simple UPDATE for any active
-        for old_targ in (await db.execute(
-            select(PaymentTarget).where(
-                PaymentTarget.invoice_id == invoice.id,
-                PaymentTarget.is_active == True,
-            )
-        )).scalars().all():
-            old_targ.is_active = False
 
-        # 3f. Persist new target
-        new_target = PaymentTarget(
-            invoice_id=invoice.id,
-            method=method,
-            network=network,
-            target_value=target_value,
-            rate_locked_usd_to_crypto=rate_locked,
-            amount_expected_crypto=amount_expected_crypto,
-            expires_at=now + timedelta(hours=24),  # Standard 24h expiry
-            bitnob_response_raw=bitnob_raw,
-            is_active=True,
-        )
-        db.add(new_target)
+        link_id = link_data.get("data", {}).get("id")
+        if not link_id:
+            raise HTTPException(status_code=502, detail="Failed to retrieve link ID from Busha")
+
+        # 4. Save link_id on invoice (overwrites if they picked a new currency)
+        invoice.busha_link_id = link_id
+        db.add(invoice)
         await db.commit()
-        await db.refresh(new_target)
-        
-        return new_target
+
+        # 5. Return Checkout URL
+        return f"https://pay.busha.co/{link_id}"

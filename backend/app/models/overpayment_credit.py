@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String
+from sqlalchemy import DateTime, ForeignKey, Numeric
 from sqlalchemy.dialects.postgresql import ENUM as PgEnum, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
