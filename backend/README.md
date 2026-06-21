@@ -1,6 +1,6 @@
 # Bitcoin & Stablecoin Invoicing Platform — Backend
 
-A FastAPI backend that lets freelancers send USD-denominated invoices paid via Bitcoin (on-chain), Lightning, USDC, or USDT — routed through the [Bitnob API](https://bitnob.dev/api-reference/).
+A FastAPI backend that lets freelancers send USD-denominated invoices paid via Bitcoin (on-chain), Lightning, USDC, or USDT — routed through the [Busha API](https://developers.busha.co/).
 
 ---
 
@@ -11,7 +11,7 @@ A FastAPI backend that lets freelancers send USD-denominated invoices paid via B
 - **Redis** — Celery broker + result backend + rate-limit store
 - **Celery** — async task queue (webhook processing, receipt generation, email)
 - **Celery Beat** — periodic job scheduler (reconciliation sweep + target expiry)
-- **Bitnob** — Bitcoin / Lightning / Stablecoin payment rails
+- **Busha** — Bitcoin / Lightning / Stablecoin payment rails
 - **WeasyPrint** — PDF receipt generation
 
 ---
@@ -68,9 +68,8 @@ Key values to fill in:
 |---|---|
 | `DATABASE_URL` | Your local Postgres connection string |
 | `REDIS_URL` | Your local Redis URL |
-| `BITNOB_CLIENT_ID` | Bitnob sandbox dashboard |
-| `BITNOB_CLIENT_SECRET` | Bitnob sandbox dashboard |
-| `BITNOB_WEBHOOK_SECRET` | Bitnob sandbox dashboard → Webhooks |
+| `BUSHA_SECRET_KEY` | Busha Business dashboard → Developer Tools |
+| `BUSHA_WEBHOOK_SECRET` | Busha Business dashboard → Webhooks |
 | `JWT_SECRET` | Generate: `python -c "import secrets; print(secrets.token_hex(32))"` |
 
 ### 4. Run database migrations
@@ -99,14 +98,14 @@ ngrok http 8000
 
 ### 6. Configure webhooks (required)
 
-Bitnob requires a **publicly reachable** URL to deliver webhook events. Without this, the reconciliation flow cannot function locally.
+Busha requires a **publicly reachable** URL to deliver webhook events. Without this, the reconciliation flow cannot function locally.
 
 1. Run `ngrok http 8000` — you'll get a URL like `https://abc123.ngrok.io`
-2. Go to your [Bitnob sandbox dashboard](https://app.bitnob.co) → **Webhooks**
-3. Set the webhook URL to: `https://abc123.ngrok.io/webhooks/bitnob`
-4. Copy the webhook secret and set `BITNOB_WEBHOOK_SECRET` in your `.env`
+2. Go to your Busha Business dashboard → **Webhooks**
+3. Set the webhook URL to: `https://abc123.ngrok.io/webhooks/busha`
+4. Copy the webhook secret and set `BUSHA_WEBHOOK_SECRET` in your `.env`
 
-> ⚠️ The ngrok URL changes every time you restart it. Update the Bitnob dashboard each time.
+> ⚠️ The ngrok URL changes every time you restart it. Update the Busha dashboard each time.
 
 ---
 
@@ -138,7 +137,7 @@ Once running, interactive docs are at:
 |---|---|---|---|
 | `GET` | `/public/invoices/{id}` | 60/min | Invoice display info |
 | `GET` | `/public/invoices/{id}/payment-methods` | 30/min | Supported payment methods |
-| `POST` | `/public/invoices/{id}/payment-target?method=` | 10/min | Generate crypto payment target |
+| `POST` | `/public/invoices/{id}/checkout-link?method=` | 10/min | Generate Busha checkout URL |
 | `GET` | `/public/invoices/{id}/status` | 120/min | Payment status (polling) |
 | `GET` | `/public/invoices/{id}/receipt` | 20/min | Download receipt |
 
@@ -146,7 +145,7 @@ Once running, interactive docs are at:
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/webhooks/bitnob` | Bitnob event receiver (HMAC-SHA512 verified) |
+| `POST` | `/webhooks/busha` | Busha event receiver (HMAC-SHA256 verified) |
 
 ---
 
@@ -174,10 +173,10 @@ Quick summary — Railway/Render/Fly.io:
 
 ### Sandbox → Production cutover
 
-Change two environment variables only:
+Change the following environment variables:
 ```
-BITNOB_BASE_URL=https://api.bitnob.co
-BITNOB_CLIENT_SECRET=<your-live-secret>
+BUSHA_BASE_URL=https://api.busha.co
+BUSHA_SECRET_KEY=<your-live-secret>
 ```
 
 No code changes required.
