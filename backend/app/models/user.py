@@ -2,12 +2,16 @@
 
 import uuid
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from sqlalchemy import String, DateTime
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models import Base
+
+if TYPE_CHECKING:
+    from app.models.invoice import Invoice
 
 
 class User(Base):
@@ -28,3 +32,5 @@ class User(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+
+    invoices: Mapped[list["Invoice"]] = relationship("Invoice", back_populates="user", lazy="noload")

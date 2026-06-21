@@ -6,13 +6,14 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, DateTime, Index, Numeric, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Index, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import ENUM as PgEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 if TYPE_CHECKING:
     from app.models.receipt import Receipt
+    from app.models.user import User
 
 
 from app.models import Base
@@ -44,6 +45,7 @@ class Invoice(Base):
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -79,6 +81,7 @@ class Invoice(Base):
     receipts: Mapped[list["Receipt"]] = relationship(
         "Receipt", back_populates="invoice", cascade="all, delete-orphan"
     )
+    user: Mapped["User"] = relationship("User", back_populates="invoices", lazy="noload")
 
     __table_args__ = (
         Index("idx_invoices_user_id", "user_id"),
