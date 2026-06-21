@@ -38,3 +38,24 @@ class S3Service:
         except (BotoCoreError, ClientError) as e:
             logger.error(f"Failed to upload to S3: {e}")
             raise
+
+    @staticmethod
+    def generate_presigned_url(object_url: str, expiration: int = 3600) -> str:
+        """
+        Generates a presigned URL for downloading a private S3 object.
+        Retrieves the bucket and key from the standard object URL.
+        """
+        s3 = S3Service.get_client()
+        bucket = settings.AWS_S3_BUCKET_NAME
+        try:
+            # Parse the object key from the URL
+            key = object_url.split(".amazonaws.com/")[-1]
+            response = s3.generate_presigned_url(
+                'get_object',
+                Params={'Bucket': bucket, 'Key': key},
+                ExpiresIn=expiration
+            )
+            return response
+        except (BotoCoreError, ClientError, IndexError) as e:
+            logger.error(f"Failed to generate presigned URL: {e}")
+            raise
