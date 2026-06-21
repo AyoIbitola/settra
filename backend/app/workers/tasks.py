@@ -229,16 +229,26 @@ def send_email(self, template_id: str, recipient: str, subject: str, data: dict,
     attachments = []
     if attachment_path and attachment_path.startswith("http"):
         try:
-            import httpx
-            with httpx.Client() as client:
-                r = client.get(attachment_path)
-                r.raise_for_status()
-                filename = "receipt.pdf"
-                if "receipts/" in attachment_path:
-                    filename = attachment_path.split("/")[-1]
-                attachments.append({"filename": filename, "content": list(r.content)})
+            import boto3
+            bucket = settings.AWS_S3_BUCKET_NAME
+            # Parse the S3 key out of the Amazon URL
+            key = attachment_path.split(".amazonaws.com/")[-1]
+            
+            s3 = boto3.client(
+                "s3",
+                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+                region_name=settings.AWS_REGION,
+            )
+            response = s3.get_object(Bucket=bucket, Key=key)
+            content = response['Body'].read()
+            
+            filename = "receipt.pdf"
+            if "receipts/" in attachment_path:
+                filename = attachment_path.split("/")[-1]
+            attachments.append({"filename": filename, "content": list(content)})
         except Exception as e:
-            logger.error(f"Failed to fetch attachment from S3 for email: {e}")
+            logger.error(f"Failed to fetch attachment from S3 for email using boto3: {e}")
 
     try:
         params = {

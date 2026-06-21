@@ -44,7 +44,7 @@ class Settings(BaseSettings):
 
     # Email (Resend)
     RESEND_API_KEY: str = ""
-    EMAIL_FROM_ADDRESS: str = "receipts@yourapp.com"
+    EMAIL_FROM_ADDRESS: str = "onboarding@resend.dev"
 
     # Receipt storage — local filesystem for dev, S3-compatible path for prod
     RECEIPTS_DIR: str = "receipts"   # local path when ENVIRONMENT=development
