@@ -29,7 +29,13 @@ export function HashReveal({
     if (hasAnimated.current) return;
     hasAnimated.current = true;
 
-    const iterations = 10;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setDisplayText(value);
+      setIsResolved(true);
+      onComplete?.();
+      return;
+    }
+
     const duration = 600;
     const startTime = Date.now();
 

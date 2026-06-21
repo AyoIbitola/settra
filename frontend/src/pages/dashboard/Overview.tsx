@@ -83,9 +83,9 @@ export default function Overview() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="relative p-6 space-y-3 overflow-hidden group">
-          <div className="absolute inset-0 bg-gradient-to-br from-signal/[0.04] to-transparent pointer-events-none" />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="relative p-6 space-y-3 overflow-hidden group bg-gradient-to-b from-white/[0.03] to-transparent border-white/[0.05] shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)] hover:border-white/[0.1] transition-all duration-500 rounded-2xl">
+          <div className="absolute inset-0 bg-gradient-to-br from-signal/[0.05] to-transparent pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
           <div className="flex items-center justify-between relative">
             <p className="text-body-sm text-silver-dim">Total received</p>
             <div className="w-8 h-8 rounded-md bg-signal/10 flex items-center justify-center">
@@ -98,8 +98,8 @@ export default function Overview() {
           <p className="text-[11px] text-silver-dim relative">Lifetime revenue</p>
         </Card>
 
-        <Card className="relative p-6 space-y-3 overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-amber/[0.04] to-transparent pointer-events-none" />
+        <Card className="relative p-6 space-y-3 overflow-hidden group bg-gradient-to-b from-white/[0.03] to-transparent border-white/[0.05] shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)] hover:border-white/[0.1] transition-all duration-500 rounded-2xl">
+          <div className="absolute inset-0 bg-gradient-to-br from-amber/[0.05] to-transparent pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
           <div className="flex items-center justify-between relative">
             <p className="text-body-sm text-silver-dim">Outstanding</p>
             <div className="w-8 h-8 rounded-md bg-amber/10 flex items-center justify-center">
@@ -112,8 +112,8 @@ export default function Overview() {
           <p className="text-[11px] text-silver-dim relative">{pendingCount} pending invoice{pendingCount !== 1 ? "s" : ""}</p>
         </Card>
 
-        <Card className="relative p-6 space-y-3 overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-danger/[0.04] to-transparent pointer-events-none" />
+        <Card className="relative p-6 space-y-3 overflow-hidden group bg-gradient-to-b from-white/[0.03] to-transparent border-white/[0.05] shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)] hover:border-white/[0.1] transition-all duration-500 rounded-2xl">
+          <div className="absolute inset-0 bg-gradient-to-br from-danger/[0.05] to-transparent pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
           <div className="flex items-center justify-between relative">
             <p className="text-body-sm text-silver-dim">Overpayments</p>
             <div className={`w-8 h-8 rounded-md flex items-center justify-center ${unresolvedOverpayments > 0 ? "bg-danger/10" : "bg-silver-dim/10"}`}>
@@ -135,7 +135,7 @@ export default function Overview() {
       </div>
 
       {/* Revenue chart */}
-      <Card className="p-6 space-y-4">
+      <Card className="p-6 space-y-4 bg-gradient-to-b from-white/[0.02] to-transparent border-white/[0.04] shadow-2xl rounded-2xl">
         <div className="flex items-center justify-between">
           <h2 className="text-body-lg font-semibold text-white">Revenue (6 months)</h2>
           <div className="flex items-center gap-4 text-[11px]">
@@ -206,8 +206,8 @@ export default function Overview() {
       </Card>
 
       {/* Recent activity */}
-      <Card className="space-y-0">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-line">
+      <Card className="space-y-0 bg-gradient-to-b from-white/[0.02] to-transparent border-white/[0.04] shadow-2xl rounded-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-white/[0.04] bg-white/[0.01]">
           <h2 className="text-body-lg font-semibold text-white">Recent activity</h2>
           <Link to="/dashboard/invoices" className="text-body-sm text-silver-dim hover:text-white transition-colors">
             View all →

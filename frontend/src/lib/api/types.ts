@@ -51,19 +51,17 @@ export interface PublicInvoiceStatus {
   remaining_usd: string | null;     // present only if partially_paid
   overpaid_amount_usd: string;
   active_target_expires_at: string | null;
-  payment?: {                        // present once a payment has landed
-    tx_hash: string;
-    method: PaymentMethod;
-    confirmations: number;
-  };
 }
 
-export interface AuthResponse {
-  token: string;
-  user: {
-    id: string;
-    email: string;
-    business_name: string;
-    created_at: string;
-  };
+export interface TokenResponse {
+  access_token: string;
+  token_type: string;
+}
+
+export interface UserResponse {
+  id: string;
+  email: string;
+  business_name: string | null;
+  created_at: string;
+  updated_at: string;
 }
