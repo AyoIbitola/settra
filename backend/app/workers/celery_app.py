@@ -30,3 +30,16 @@ celery_app.conf.update(
 )
 
 celery_app.autodiscover_tasks(["app.workers"])
+
+from celery.signals import worker_process_init
+
+@worker_process_init.connect
+def dispose_sqlalchemy_engine(**kwargs):
+    """
+    Safely dispose of the global SQLAlchemy engine pool upon worker creation.
+    When Celery preforks, child workers inherit the parent's connection pool,
+    which will cause `asyncpg.exceptions.InterfaceError: another operation is in progress`
+    if multiple worker tasks run concurrently. Disposing it forces workers to establish new connections.
+    """
+    from app.db import engine
+    engine.sync_engine.dispose(close=False)
