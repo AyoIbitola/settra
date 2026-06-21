@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { Card } from "../../components/ui/Card";
 import { StatusBadge } from "../../components/StatusBadge";
 import { HashReveal } from "../../components/HashReveal";
-import { getPublicInvoice, getPaymentMethods, createPaymentTarget, getPublicInvoiceStatus } from "../../lib/api/public";
+import { getPublicInvoice, getPaymentMethods, createPaymentTarget, getPublicInvoiceStatus, simulatePayment } from "../../lib/api/public";
 import { formatUSD } from "../../lib/decimal";
 import type { PublicInvoice, PaymentTarget, PublicInvoiceStatus, PaymentMethod } from "../../lib/api/types";
 import { Copy, Check, ArrowRight } from "lucide-react";
@@ -17,9 +17,10 @@ export default function Pay() {
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [target, setTarget] = useState<PaymentTarget | null>(null);
   const [status, setStatus] = useState<PublicInvoiceStatus | null>(null);
-  
+
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [simulating, setSimulating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -43,7 +44,7 @@ export default function Pay() {
   // Polling for status
   useEffect(() => {
     if (!id || !target || status?.status === "paid" || status?.status === "expired" || status?.status === "cancelled") return;
-    
+
     const interval = setInterval(() => {
       getPublicInvoiceStatus(id).then(setStatus).catch(console.error);
     }, 5000);
@@ -62,6 +63,21 @@ export default function Pay() {
       setError(err.message);
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleSimulatePayment = async () => {
+    if (!id || !target) return;
+    setSimulating(true);
+    setError(null);
+    try {
+      await simulatePayment(id, target.amount_expected_crypto);
+      const newStatus = await getPublicInvoiceStatus(id);
+      setStatus(newStatus);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSimulating(false);
     }
   };
 
@@ -92,12 +108,12 @@ export default function Pay() {
   if (!invoice) return null;
 
   // --- View States --- //
-  
+
   if (status?.status === "paid" || status?.status === "overpaid") {
     return (
       <div className="min-h-screen bg-ink flex items-center justify-center p-6 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-signal/5 to-transparent pointer-events-none" />
-        
+
         <Card className="max-w-md w-full p-10 space-y-8 relative z-10 border-signal/20 shadow-[0_0_50px_-12px_rgba(50,215,75,0.15)]">
           <div className="flex flex-col items-center text-center space-y-4">
             <div className="w-16 h-16 rounded-full bg-signal/10 text-signal flex items-center justify-center">
@@ -110,7 +126,7 @@ export default function Pay() {
               <p className="text-body-sm text-silver-dim">Your receipt is secured.</p>
             </div>
           </div>
-          
+
           <div className="p-4 rounded-md bg-ink border border-line space-y-4">
             <div className="flex justify-between items-center text-body-sm">
               <span className="text-silver-dim">Paid to</span>
@@ -123,13 +139,29 @@ export default function Pay() {
             <div className="space-y-2 pt-4 border-t border-line">
               <p className="text-[11px] text-silver-dim uppercase">Cryptographic Proof</p>
               <div className="flex items-center gap-2">
-                <HashReveal 
-                  value={"7f3a91c4d92b3a819c4d92b3a819c4d...819c4d"} 
-                  className="font-mono text-[11px] text-signal truncate flex-1" 
+                <HashReveal
+                  value={"7f3a91c4d92b3a819c4d92b3a819c4d...819c4d"}
+                  className="font-mono text-[11px] text-signal truncate flex-1"
                 />
                 <Check size={14} className="text-signal shrink-0" />
               </div>
             </div>
+          </div>
+
+          <div className="pt-2">
+            <a 
+              href={`${import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'}/public/invoices/${id}/receipt`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full py-3 px-4 rounded-lg bg-white text-ink text-body-sm font-semibold hover:bg-silver transition-colors flex items-center justify-center gap-2"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              Download Receipt
+            </a>
           </div>
         </Card>
       </div>
@@ -212,10 +244,10 @@ export default function Pay() {
                 <div className="grid grid-cols-1 gap-3">
                   {methods.map((method) => {
                     const label = method === "btc_onchain" ? "Bitcoin On-chain" :
-                                  method === "btc" as any ? "Bitcoin On-chain" :
-                                  method === "lightning" ? "Lightning Network" :
-                                  method === "usdc" ? "USDC" : 
-                                  method === "usdt" ? "USDT" : method;
+                      method === "btc" as any ? "Bitcoin On-chain" :
+                        method === "lightning" ? "Lightning Network" :
+                          method === "usdc" ? "USDC" :
+                            method === "usdt" ? "USDT" : method;
                     return (
                       <button
                         key={method}
@@ -234,8 +266,8 @@ export default function Pay() {
             // Payment Target View — QR Code + Address
             <div className="space-y-6 animate-fade-in flex flex-col items-center text-center">
               <div className="flex justify-between w-full items-center">
-                <button 
-                  onClick={() => setTarget(null)} 
+                <button
+                  onClick={() => setTarget(null)}
                   className="text-body-sm text-silver-dim hover:text-white transition-colors text-left"
                 >
                   ← Back
@@ -249,9 +281,9 @@ export default function Pay() {
               </div>
 
               <div className="relative p-4 bg-white rounded-xl">
-                <QRCodeSVG 
-                  value={getQRValue(target)} 
-                  size={200} 
+                <QRCodeSVG
+                  value={getQRValue(target)}
+                  size={200}
                   level="H"
                   includeMargin={false}
                 />
@@ -279,13 +311,31 @@ export default function Pay() {
 
               {target.expires_at && (
                 <div className="flex items-center gap-3 pt-6 text-silver-dim">
-                  <CountdownRing 
-                    expiresAt={target.expires_at} 
-                    onExpire={() => getPublicInvoiceStatus(id!).then(setStatus)} 
+                  <CountdownRing
+                    expiresAt={target.expires_at}
+                    onExpire={() => getPublicInvoiceStatus(id!).then(setStatus)}
                   />
                   <span className="text-[11px]">Payment address expires</span>
                 </div>
               )}
+
+              {/* DEMO: Simulate Payment Button */}
+              <div className="w-full pt-4">
+                <button
+                  onClick={handleSimulatePayment}
+                  disabled={simulating}
+                  className="w-full py-3 px-4 rounded-lg bg-white text-ink text-body-sm font-semibold hover:bg-silver transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {simulating ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-ink/20 border-t-ink rounded-full animate-spin" />
+                      <span>Verifying...</span>
+                    </>
+                  ) : (
+                    "I have paid"
+                  )}
+                </button>
+              </div>
             </div>
           )}
         </Card>
