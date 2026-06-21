@@ -17,9 +17,11 @@ class BushaClient:
     def __init__(self):
         self.base_url = settings.BUSHA_BASE_URL.rstrip('/')
         self.secret_key = settings.BUSHA_SECRET_KEY
+        self.public_key = settings.BUSHA_PUBLIC_KEY
         
         # Remove any surrounding quotes that might have been copied from .env
         self.secret_key = self.secret_key.strip('"').strip("'")
+        self.public_key = self.public_key.strip('"').strip("'")
         
         self.headers = {
             "Authorization": f"Bearer {self.secret_key}",
@@ -35,6 +37,47 @@ class BushaClient:
     async def get_currencies(self) -> dict[str, Any]:
         """Test endpoint to fetch supported currencies and verify authentication."""
         response = await self.client.get("/v1/currencies")
+        await self._handle_response(response)
+        return response.json()
+
+    async def create_payment_request(
+        self,
+        quote_amount: str,
+        quote_currency: str,
+        source_currency: str,
+        target_currency: str,
+        network: str,
+        customer_email: str,
+        reference: str,
+    ) -> dict[str, Any]:
+        """Create a payment request using Public Key per the Busha API docs."""
+        payload = {
+            "additional_info": {
+                "email": customer_email,
+            },
+            "quote_amount": quote_amount,
+            "quote_currency": quote_currency,
+            "source_currency": source_currency,
+            "target_currency": target_currency,
+            "pay_in": {
+                "type": "address",
+                "network": network
+            },
+            "reference": reference
+        }
+        
+        # Note: Payment Requests require the Public API Key in the X-BU-PUBLIC-KEY header.
+        headers = {
+            "X-BU-PUBLIC-KEY": self.public_key,
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
+        # Removing Authorization header for this specific request to avoid conflicts,
+        # since it uses the X-BU-PUBLIC-KEY instead.
+        headers["Authorization"] = ""
+        
+        response = await self.client.post("/v1/payments/requests", json=payload, headers=headers)
         await self._handle_response(response)
         return response.json()
 

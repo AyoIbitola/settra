@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     BUSHA_BASE_URL: str
     BUSHA_SECRET_KEY: str = ""
     BUSHA_WEBHOOK_SECRET: str = ""
+    BUSHA_PUBLIC_KEY: str = ""
 
     # Auth
     JWT_SECRET: str = "change-me-to-a-random-secret"

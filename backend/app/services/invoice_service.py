@@ -98,10 +98,10 @@ class InvoiceService:
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def get_checkout_link(
+    async def create_payment_target(
         db: AsyncSession, invoice_id: uuid.UUID, method: str
-    ) -> str:
-        """Returns a Busha Checkout URL. Updates invoice with the link_id."""
+    ) -> dict:
+        """Returns details for a new Payment Target. Updates invoice with request_id."""
         from app.services.busha_client import BushaClient
 
         if method not in ["usdc", "usdt", "btc"]:
@@ -135,26 +135,49 @@ class InvoiceService:
         # Normalize method to Busha currency code (BTC, USDC, USDT)
         target_currency = method.upper()
 
-        # 3. Call Busha to create a link
+        # 3. Call Busha to create a payment request
+        network = "TRX" if method == "usdt" else "BASE" if method == "usdc" else "BTC"
+        
         async with BushaClient() as client:
-            link_data = await client.create_one_time_payment_link(
-                name=f"Invoice {invoice.busha_reference}",
-                title=f"Invoice {invoice.client_name}",
-                description=invoice.description or "",
+            request_data = await client.create_payment_request(
                 quote_amount=str(amount_to_quote_usd),
                 quote_currency="USD",
+                source_currency=target_currency,
                 target_currency=target_currency,
+                network=network,
                 customer_email=invoice.client_email,
+                reference=invoice.busha_reference,
             )
 
-        link_id = link_data.get("data", {}).get("id")
-        if not link_id:
-            raise HTTPException(status_code=502, detail="Failed to retrieve link ID from Busha")
+        data = request_data.get("data", {})
+        request_id = data.get("id")
+        if not request_id:
+            raise HTTPException(status_code=502, detail="Failed to retrieve request ID from Busha")
 
-        # 4. Save link_id on invoice (overwrites if they picked a new currency)
-        invoice.busha_link_id = link_id
+        pay_in = data.get("pay_in", {})
+        target_value = pay_in.get("address")
+        expires_at_str = data.get("expires_at", "")
+        amount_expected = data.get("source_amount", "0")
+
+        # 4. Save payment_request_id on invoice 
+        invoice.busha_link_id = request_id  # REUSING busha_link_id field for request_id or we can just use busha_reference
         db.add(invoice)
         await db.commit()
 
-        # 5. Return Checkout URL
-        return f"https://pay.busha.co/{link_id}"
+        # Parse datetime securely for frontend output
+        try:
+            expires_at = datetime.fromisoformat(expires_at_str.replace("Z", "+00:00"))
+        except ValueError:
+            # Fallback to 1 hour from now if unparseable
+            from datetime import timedelta
+            expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+
+        # 5. Return Payment Target details expected by frontend
+        return {
+            "target_value": target_value,
+            "amount_expected_crypto": Decimal(amount_expected),
+            "expires_at": expires_at,
+            "method": method,
+            "network": network,
+            "payment_request_id": request_id,
+        }

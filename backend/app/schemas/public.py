@@ -18,8 +18,13 @@ class PublicInvoiceResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class CheckoutLinkResponse(BaseModel):
-    checkout_url: str
+class PaymentTargetResponse(BaseModel):
+    target_value: str
+    amount_expected_crypto: Decimal
+    expires_at: datetime
+    method: str
+    network: str
+    payment_request_id: str
 
     model_config = ConfigDict(from_attributes=True)
 
