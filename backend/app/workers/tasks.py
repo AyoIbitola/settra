@@ -2,11 +2,12 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from decimal import Decimal
+from typing import Any, Awaitable
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from app.db import async_session_factory
+from app.db import async_session_factory, engine
 from app.models.invoice import Invoice, InvoiceStatus
 from app.models.payment import Payment
 from app.models.payment_target import PaymentTarget
@@ -15,6 +16,22 @@ from app.services.reconciliation_service import ReconciliationService
 from app.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
+
+
+async def _run_and_dispose(coro: Awaitable[Any]) -> Any:
+    """
+    Celery tasks are sync functions, so each task uses asyncio.run().
+    Dispose pooled asyncpg connections before that per-task event loop closes;
+    otherwise the next task can reuse a connection bound to the wrong loop.
+    """
+    try:
+        return await coro
+    finally:
+        await engine.dispose()
+
+
+def run_async_task(coro: Awaitable[Any]) -> Any:
+    return asyncio.run(_run_and_dispose(coro))
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +197,7 @@ async def _process_webhook_event(webhook_event_id: str):
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=30)
 def process_webhook_event(self, webhook_event_id: str):
     try:
-        asyncio.run(_process_webhook_event(webhook_event_id))
+        run_async_task(_process_webhook_event(webhook_event_id))
     except Exception as exc:
         logger.exception("Error processing webhook")
         raise self.retry(exc=exc)
@@ -271,7 +288,7 @@ async def _generate_receipt(invoice_id: str, payment_id: str = None):
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=30)
 def generate_receipt(self, invoice_id: str, payment_id: str = None):
     try:
-        asyncio.run(_generate_receipt(invoice_id, payment_id))
+        run_async_task(_generate_receipt(invoice_id, payment_id))
     except Exception as exc:
         logger.exception("Error generating receipt")
         raise self.retry(exc=exc)
@@ -340,7 +357,7 @@ async def _expire_stale_payment_targets():
 @celery_app.task
 def expire_stale_payment_targets():
     """Celery Beat entry-point — every 1 minute."""
-    asyncio.run(_expire_stale_payment_targets())
+    run_async_task(_expire_stale_payment_targets())
 
 
 async def _reconciliation_sweep():
@@ -435,4 +452,4 @@ async def _reconciliation_sweep():
 @celery_app.task
 def reconciliation_sweep():
     """Celery Beat entry-point — every 5 minutes."""
-    asyncio.run(_reconciliation_sweep())
+    run_async_task(_reconciliation_sweep())
