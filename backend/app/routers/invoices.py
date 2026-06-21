@@ -66,10 +66,14 @@ async def get_invoice_receipt(
     db: Annotated[AsyncSession, Depends(get_session)],
 ):
     """
-    Get the generated PDF receipt for the owner.
+    Get the generated PDF receipt for the owner, or queue generation for paid invoices.
     """
+    from fastapi.responses import JSONResponse, RedirectResponse
     from sqlalchemy import select
+
+    from app.models.payment import Payment
     from app.models.receipt import Receipt
+    from app.workers.tasks import generate_receipt
 
     # Ensure ownership
     invoice = await InvoiceService.get_invoice_by_id(db=db, invoice_id=invoice_id, user_id=current_user.id)
@@ -81,13 +85,27 @@ async def get_invoice_receipt(
     )
     receipt = result.scalars().first()
     if not receipt:
+        if invoice.status in [
+            InvoiceStatus.PAID,
+            InvoiceStatus.PARTIALLY_PAID,
+            InvoiceStatus.OVERPAID,
+        ]:
+            payment_result = await db.execute(
+                select(Payment)
+                .where(Payment.invoice_id == invoice_id)
+                .order_by(Payment.received_at.desc())
+                .limit(1)
+            )
+            payment = payment_result.scalar_one_or_none()
+            generate_receipt.delay(str(invoice_id), str(payment.id) if payment else None)
+            return JSONResponse(status_code=202, content={"detail": "Receipt generation queued"})
+
         raise HTTPException(status_code=404, detail="Receipt not yet generated")
-    
+
     if not receipt.pdf_path.startswith("http"):
         # For legacy records if any, or gracefully degrade
         raise HTTPException(status_code=404, detail="Receipt file not available remotely.")
 
-    from fastapi.responses import RedirectResponse
     # Redirect to the S3 URL
     return RedirectResponse(url=receipt.pdf_path)
 
