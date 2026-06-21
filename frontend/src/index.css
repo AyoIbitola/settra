@@ -1,0 +1,56 @@
+@import "tailwindcss";
+@import "./styles/tokens.css";
+@import "./styles/fonts.css";
+
+@theme {
+  /* Colors */
+  --color-ink: var(--color-ink);
+  --color-ink-raised: var(--color-ink-raised);
+  --color-line: var(--color-line);
+  --color-white: var(--color-white);
+  --color-silver: var(--color-silver);
+  --color-silver-dim: var(--color-silver-dim);
+  --color-signal: var(--color-signal);
+  --color-signal-dim: var(--color-signal-dim);
+  --color-amber: var(--color-amber);
+  --color-amber-dim: var(--color-amber-dim);
+  --color-danger: var(--color-danger);
+
+  /* Font Families */
+  --font-display: "General Sans", sans-serif;
+  --font-body: "Inter", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  /* Font Sizes */
+  --text-display-xl: var(--text-display-xl);
+  --text-display-lg: var(--text-display-lg);
+  --text-display-md: var(--text-display-md);
+  --text-body-lg: var(--text-body-lg);
+  --text-body: var(--text-body);
+  --text-body-sm: var(--text-body-sm);
+  --text-mono-lg: var(--text-mono-lg);
+  --text-mono: var(--text-mono);
+  --text-mono-sm: var(--text-mono-sm);
+
+  /* Radius */
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+}
+
+@layer base {
+  body {
+    @apply bg-ink text-silver font-body antialiased;
+    background-color: var(--color-ink);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display text-white;
+  }
+}
+
+@keyframes sweep {
+  0% { transform: translateX(-150%) skewX(-12deg); }
+  50% { transform: translateX(150%) skewX(-12deg); }
+  100% { transform: translateX(150%) skewX(-12deg); }
+}

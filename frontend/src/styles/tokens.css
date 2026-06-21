@@ -1,0 +1,29 @@
+:root {
+  --color-ink:         #0A0A0B;  /* primary background — near-black, slightly warm, never pure #000 */
+  --color-ink-raised:  #121316;  /* panel/card surfaces in the dashboard — one step lighter than ink */
+  --color-line:        #1E2024;  /* hairline borders, dividers — barely-there separation */
+  --color-white:       #F5F5F4;  /* headline text, primary text on dark */
+  --color-silver:      #C8CDD3;  /* body text, secondary text, line art on dark */
+  --color-silver-dim:  #6B6F76;  /* tertiary text, placeholders, disabled states */
+  --color-signal:      #7CFF9B;  /* CONFIRMED/PAID state ONLY */
+  --color-signal-dim:  #2A4A33;  /* signal color at low opacity */
+  --color-amber:       #E8A33D;  /* PENDING/AWAITING state ONLY */
+  --color-amber-dim:   #4A3A20;  /* amber at low opacity */
+  --color-danger:      #FF6B6B;  /* errors, overpaid-flag, destructive actions only */
+
+  /* Typography Scale */
+  --text-display-xl: clamp(2.75rem, 6vw, 5.5rem);
+  --text-display-lg: clamp(2rem, 4vw, 3.25rem);
+  --text-display-md: 1.75rem;
+  --text-body-lg:    1.125rem;
+  --text-body:       1rem;
+  --text-body-sm:    0.875rem;
+  --text-mono-lg:    1.125rem;
+  --text-mono:       0.9375rem;
+  --text-mono-sm:    0.8125rem;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+}

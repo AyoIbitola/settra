@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Receipt - {{ invoice_reference }}</title>
+    <style>
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; line-height: 1.6; }
+        .container { max-width: 800px; margin: 0 auto; padding: 40px; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #eee; padding-bottom: 20px; margin-bottom: 30px; }
+        .business-info h1 { margin: 0; color: #2c3e50; font-size: 28px; }
+        .receipt-title h2 { margin: 0; color: #7f8c8d; text-transform: uppercase; letter-spacing: 2px; }
+        .receipt-details { text-align: right; color: #7f8c8d; font-size: 14px; }
+        .section { margin-bottom: 30px; }
+        .section h3 { color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px; }
+        .client-info p { margin: 5px 0; }
+        table.totals { width: 100%; border-collapse: collapse; margin-top: 30px; }
+        table.totals th, table.totals td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        table.totals th { color: #7f8c8d; font-weight: normal; text-transform: uppercase; font-size: 12px; }
+        .amount-row td { font-size: 18px; font-weight: bold; color: #2c3e50; }
+        .footer { margin-top: 50px; text-align: center; color: #95a5a6; font-size: 12px; border-top: 1px solid #eee; padding-top: 20px; }
+        a { color: #3498db; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="business-info">
+                <h1>{{ business_name }}</h1>
+            </div>
+            <div class="receipt-title">
+                <h2>Receipt</h2>
+                <div class="receipt-details">
+                    <p>Reference: {{ invoice_reference }}</p>
+                    <p>Date: {{ timestamp }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="section client-info">
+            <h3>Billed To</h3>
+            <p><strong>{{ client_name }}</strong></p>
+        </div>
+
+        <div class="section">
+            <h3>Description</h3>
+            <p>{{ description }}</p>
+        </div>
+
+        <table class="totals">
+            <thead>
+                <tr>
+                    <th>Payment Method</th>
+                    <th>Transaction Hash</th>
+                    <th>Amount Paid</th>
+                    <th>USD Equivalent</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="amount-row">
+                    <td>{{ method }}</td>
+                    <td>
+                        <a href="{{ explorer_link }}">{{ tx_hash }}</a>
+                    </td>
+                    <td>{{ amount_crypto }}</td>
+                    <td>${{ amount_usd }}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="footer">
+            <p>Thank you for your payment!</p>
+        </div>
+    </div>
+</body>
+</html>
