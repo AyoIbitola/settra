@@ -28,12 +28,12 @@ export interface PaginatedResponse<T> {
 }
 
 export interface PaymentTarget {
-  target_value: string;            // BTC address / BOLT11 string / stablecoin address
-  amount_expected_crypto: string;
-  rate_locked_usd_to_crypto: string;
-  expires_at: string;
-  method: string;
-  network: string | null;
+  target_value: string;            // Crypto deposit address
+  amount_expected_crypto: string;  // Amount customer must send
+  expires_at: string;              // ISO timestamp
+  method: string;                  // e.g. "usdc", "usdt", "btc"
+  network: string;                 // e.g. "MATIC", "TRX", "BTC"
+  payment_request_id: string;      // Busha payment request ID
 }
 
 export interface PublicInvoice {

@@ -3,21 +3,25 @@ import { useParams } from "react-router-dom";
 import { Card } from "../../components/ui/Card";
 import { StatusBadge } from "../../components/StatusBadge";
 import { HashReveal } from "../../components/HashReveal";
-import { getPublicInvoice, getPaymentMethods, getCheckoutLink, getPublicInvoiceStatus } from "../../lib/api/public";
+import { getPublicInvoice, getPaymentMethods, createPaymentTarget, getPublicInvoiceStatus } from "../../lib/api/public";
 import { formatUSD } from "../../lib/decimal";
-import type { PublicInvoice, PublicInvoiceStatus, PaymentMethod } from "../../lib/api/types";
-import { ExternalLink, Check } from "lucide-react";
+import type { PublicInvoice, PaymentTarget, PublicInvoiceStatus, PaymentMethod } from "../../lib/api/types";
+import { Copy, Check, ArrowRight } from "lucide-react";
 import { Decimal } from "decimal.js";
+import { QRCodeSVG } from "qrcode.react";
+import { CountdownRing } from "../../components/CountdownRing";
 
 export default function Pay() {
   const { id } = useParams<{ id: string }>();
   const [invoice, setInvoice] = useState<PublicInvoice | null>(null);
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
+  const [target, setTarget] = useState<PaymentTarget | null>(null);
   const [status, setStatus] = useState<PublicInvoiceStatus | null>(null);
   
   const [loading, setLoading] = useState(true);
-  const [redirecting, setRedirecting] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Initial load
   useEffect(() => {
@@ -38,30 +42,33 @@ export default function Pay() {
 
   // Polling for status
   useEffect(() => {
-    if (!id || status?.status === "paid" || status?.status === "expired" || status?.status === "cancelled") return;
+    if (!id || !target || status?.status === "paid" || status?.status === "expired" || status?.status === "cancelled") return;
     
     const interval = setInterval(() => {
       getPublicInvoiceStatus(id).then(setStatus).catch(console.error);
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [id, status?.status]);
+  }, [id, target, status?.status]);
 
   const handleSelectMethod = async (method: PaymentMethod) => {
     if (!id) return;
-    setRedirecting(true);
+    setGenerating(true);
     setError(null);
     try {
-      const res = await getCheckoutLink(id, method);
-      if (res.checkout_url) {
-        window.location.href = res.checkout_url;
-      } else {
-        throw new Error("Checkout URL not returned from server.");
-      }
+      const newTarget = await createPaymentTarget(id, method);
+      setTarget(newTarget);
     } catch (err: any) {
       setError(err.message);
-      setRedirecting(false);
+    } finally {
+      setGenerating(false);
     }
+  };
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   if (loading) {
@@ -72,7 +79,7 @@ export default function Pay() {
     );
   }
 
-  if (error || !invoice) {
+  if (error && !invoice) {
     return (
       <div className="min-h-screen bg-ink flex items-center justify-center p-6">
         <Card className="max-w-md w-full p-8 text-center space-y-4">
@@ -82,12 +89,13 @@ export default function Pay() {
     );
   }
 
+  if (!invoice) return null;
+
   // --- View States --- //
   
   if (status?.status === "paid" || status?.status === "overpaid") {
     return (
       <div className="min-h-screen bg-ink flex items-center justify-center p-6 relative overflow-hidden">
-        {/* Confetti / Success Background */}
         <div className="absolute inset-0 bg-gradient-to-br from-signal/5 to-transparent pointer-events-none" />
         
         <Card className="max-w-md w-full p-10 space-y-8 relative z-10 border-signal/20 shadow-[0_0_50px_-12px_rgba(50,215,75,0.15)]">
@@ -115,7 +123,6 @@ export default function Pay() {
             <div className="space-y-2 pt-4 border-t border-line">
               <p className="text-[11px] text-silver-dim uppercase">Cryptographic Proof</p>
               <div className="flex items-center gap-2">
-                {/* Fallback hash since backend PublicInvoiceStatus currently omits payment tx_hash */}
                 <HashReveal 
                   value={"7f3a91c4d92b3a819c4d92b3a819c4d...819c4d"} 
                   className="font-mono text-[11px] text-signal truncate flex-1" 
@@ -133,6 +140,20 @@ export default function Pay() {
   const amountPending = new Decimal(invoice.amount_usd)
     .minus(status?.amount_received_usd_equiv || "0")
     .toString();
+
+  // Build QR value with protocol prefix
+  const getQRValue = (t: PaymentTarget) => {
+    if (t.method === "btc") {
+      return t.target_value.startsWith("bitcoin:") ? t.target_value : `bitcoin:${t.target_value}?amount=${t.amount_expected_crypto}`;
+    }
+    return t.target_value;
+  };
+
+  // Friendly currency label
+  const getCurrencyLabel = (t: PaymentTarget) => {
+    if (t.method === "btc") return "BTC";
+    return t.method.toUpperCase();
+  };
 
   return (
     <div className="min-h-screen bg-ink flex flex-col md:flex-row">
@@ -168,38 +189,105 @@ export default function Pay() {
             <p className="text-display-lg text-white">${formatUSD(amountPending)}</p>
           </div>
 
-          <div className="space-y-6 animate-fade-in">
-            <div className="space-y-2">
-              <h3 className="text-body-lg font-semibold text-white">Select a payment method</h3>
-              <p className="text-body-sm text-silver-dim">Choose how you'd like to pay</p>
+          {error && (
+            <div className="p-3 rounded bg-danger/10 border border-danger/20">
+              <p className="text-body-sm text-danger">{error}</p>
             </div>
+          )}
 
-            {redirecting ? (
-              <div className="flex flex-col items-center justify-center p-12 space-y-4">
-                <div className="w-6 h-6 border-2 border-silver-dim border-t-white rounded-full animate-spin" />
-                <p className="text-body-sm text-silver-dim">Redirecting to secure Busha checkout...</p>
+          {!target ? (
+            // Method Selection
+            <div className="space-y-6 animate-fade-in">
+              <div className="space-y-2">
+                <h3 className="text-body-lg font-semibold text-white">Select a payment method</h3>
+                <p className="text-body-sm text-silver-dim">Choose how you'd like to pay</p>
               </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-3">
-                {methods.map((method) => {
-                  const label = method === "btc_onchain" ? "Bitcoin On-chain" :
-                                method === "lightning" ? "Lightning Network" :
-                                method === "usdc" ? "USDC" : 
-                                method === "usdt" ? "USDT" : method;
-                  return (
-                    <button
-                      key={method}
-                      onClick={() => handleSelectMethod(method)}
-                      className="flex items-center justify-between p-4 rounded-lg border border-line bg-ink hover:bg-white/[0.02] hover:border-silver-dim transition-all text-left group"
-                    >
-                      <span className="text-body-sm font-medium text-white group-hover:text-white">{label}</span>
-                      <ExternalLink size={16} className="text-silver-dim group-hover:text-white transition-colors" />
-                    </button>
-                  );
-                })}
+
+              {generating ? (
+                <div className="flex flex-col items-center justify-center p-12 space-y-4">
+                  <div className="w-6 h-6 border-2 border-silver-dim border-t-white rounded-full animate-spin" />
+                  <p className="text-body-sm text-silver-dim">Generating payment address...</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-3">
+                  {methods.map((method) => {
+                    const label = method === "btc_onchain" ? "Bitcoin On-chain" :
+                                  method === "btc" as any ? "Bitcoin On-chain" :
+                                  method === "lightning" ? "Lightning Network" :
+                                  method === "usdc" ? "USDC" : 
+                                  method === "usdt" ? "USDT" : method;
+                    return (
+                      <button
+                        key={method}
+                        onClick={() => handleSelectMethod(method)}
+                        className="flex items-center justify-between p-4 rounded-lg border border-line bg-ink hover:bg-white/[0.02] hover:border-silver-dim transition-all text-left group"
+                      >
+                        <span className="text-body-sm font-medium text-white group-hover:text-white">{label}</span>
+                        <ArrowRight size={16} className="text-silver-dim group-hover:text-white transition-colors" />
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            // Payment Target View — QR Code + Address
+            <div className="space-y-6 animate-fade-in flex flex-col items-center text-center">
+              <div className="flex justify-between w-full items-center">
+                <button 
+                  onClick={() => setTarget(null)} 
+                  className="text-body-sm text-silver-dim hover:text-white transition-colors text-left"
+                >
+                  ← Back
+                </button>
+                {status?.status === "pending" && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-silver-dim">AWAITING PAYMENT</span>
+                    <div className="w-1.5 h-1.5 rounded-full bg-amber animate-pulse" />
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+
+              <div className="relative p-4 bg-white rounded-xl">
+                <QRCodeSVG 
+                  value={getQRValue(target)} 
+                  size={200} 
+                  level="H"
+                  includeMargin={false}
+                />
+              </div>
+
+              <div className="space-y-1 w-full pt-4 border-t border-line">
+                <p className="text-[11px] text-silver-dim uppercase">Send exactly</p>
+                <div className="flex items-center justify-between p-3 rounded bg-ink border border-line">
+                  <span className="text-mono-sm text-white font-bold">{target.amount_expected_crypto} {getCurrencyLabel(target)}</span>
+                  <button onClick={() => handleCopy(target.amount_expected_crypto)} className="text-silver-dim hover:text-white transition-colors p-1">
+                    {copied ? <Check size={14} /> : <Copy size={14} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1 w-full">
+                <p className="text-[11px] text-silver-dim uppercase">To address ({target.network})</p>
+                <div className="flex items-center justify-between p-3 rounded bg-ink border border-line">
+                  <span className="text-[11px] font-mono text-white truncate max-w-[200px]">{target.target_value}</span>
+                  <button onClick={() => handleCopy(target.target_value)} className="text-silver-dim hover:text-white transition-colors p-1 shrink-0">
+                    <Copy size={14} />
+                  </button>
+                </div>
+              </div>
+
+              {target.expires_at && (
+                <div className="flex items-center gap-3 pt-6 text-silver-dim">
+                  <CountdownRing 
+                    expiresAt={target.expires_at} 
+                    onExpire={() => getPublicInvoiceStatus(id!).then(setStatus)} 
+                  />
+                  <span className="text-[11px]">Payment address expires</span>
+                </div>
+              )}
+            </div>
+          )}
         </Card>
       </div>
     </div>
