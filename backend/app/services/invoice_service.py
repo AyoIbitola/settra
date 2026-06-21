@@ -98,16 +98,16 @@ class InvoiceService:
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def generate_payment_target(
+    async def create_payment_target(
         db: AsyncSession, invoice_id: uuid.UUID, method: str
     ) -> dict:
-        """Creates a Busha Payment Request and returns the crypto deposit info."""
-        from app.services.busha_client import BushaClient, METHOD_MAP
+        """Returns details for a new Payment Target. Updates invoice with request_id."""
+        from app.services.busha_client import BushaClient
 
-        if method not in METHOD_MAP:
+        if method not in ["usdc", "usdt", "btc"]:
             raise HTTPException(status_code=400, detail="Unsupported payment method")
 
-        # 1. Load invoice with lock to prevent concurrent target generation
+        # 1. Load invoice with lock to prevent concurrent link generation
         result = await db.execute(
             select(Invoice)
             .options(joinedload(Invoice.user))
@@ -119,7 +119,7 @@ class InvoiceService:
             raise HTTPException(status_code=404, detail="Invoice not found")
 
         if invoice.status not in [InvoiceStatus.DRAFT, InvoiceStatus.PENDING, InvoiceStatus.PARTIALLY_PAID]:
-            raise HTTPException(status_code=409, detail=f"Cannot generate target for invoice in {invoice.status.value} state")
+            raise HTTPException(status_code=409, detail=f"Cannot generate link for invoice in {invoice.status.value} state")
 
         # 2a. If draft, transition to pending
         if invoice.status == InvoiceStatus.DRAFT:
@@ -132,37 +132,52 @@ class InvoiceService:
             if amount_to_quote_usd <= 0:
                 raise HTTPException(status_code=409, detail="Invoice is completely paid")
 
-        # 3. Call Busha Payment Requests API
-        reference = f"{invoice.busha_reference}_{method}_{uuid.uuid4().hex[:8]}"
+        # Normalize method to Busha currency code (BTC, USDC, USDT)
+        target_currency = method.upper()
+
+        # 3. Call Busha to create a payment request
+        network = "TRX" if method == "usdt" else "BASE" if method == "usdc" else "BTC"
+        
         async with BushaClient() as client:
-            resp = await client.create_payment_request(
-                method=method,
+            request_data = await client.create_payment_request(
                 quote_amount=str(amount_to_quote_usd),
+                quote_currency="USD",
+                source_currency=target_currency,
+                target_currency=target_currency,
+                network=network,
                 customer_email=invoice.client_email,
-                reference=reference,
+                reference=invoice.busha_reference,
             )
 
-        data = resp.get("data", {})
+        data = request_data.get("data", {})
+        request_id = data.get("id")
+        if not request_id:
+            raise HTTPException(status_code=502, detail="Failed to retrieve request ID from Busha")
+
         pay_in = data.get("pay_in", {})
+        target_value = pay_in.get("address")
+        expires_at_str = data.get("expires_at", "")
+        amount_expected = data.get("source_amount", "0")
 
-        payment_request_id = data.get("id")
-        if not payment_request_id:
-            raise HTTPException(status_code=502, detail="Failed to get payment request ID from Busha")
-
-        # 4. Save the payment request ID on invoice
-        invoice.busha_link_id = payment_request_id
+        # 4. Save payment_request_id on invoice 
+        invoice.busha_link_id = request_id  # REUSING busha_link_id field for request_id or we can just use busha_reference
         db.add(invoice)
         await db.commit()
 
-        source_currency, target_currency, network = METHOD_MAP[method]
+        # Parse datetime securely for frontend output
+        try:
+            expires_at = datetime.fromisoformat(expires_at_str.replace("Z", "+00:00"))
+        except ValueError:
+            # Fallback to 1 hour from now if unparseable
+            from datetime import timedelta
+            expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
 
-        # 5. Return the payment target info
+        # 5. Return Payment Target details expected by frontend
         return {
-            "target_value": pay_in.get("address", ""),
-            "amount_expected_crypto": data.get("source_amount", ""),
-            "expires_at": pay_in.get("expires_at") or data.get("expires_at", ""),
+            "target_value": target_value,
+            "amount_expected_crypto": Decimal(amount_expected),
+            "expires_at": expires_at,
             "method": method,
             "network": network,
-            "payment_request_id": payment_request_id,
+            "payment_request_id": request_id,
         }
-

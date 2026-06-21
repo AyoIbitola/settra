@@ -64,13 +64,12 @@ async def create_payment_target(
     db: AsyncSession = Depends(get_session),
 ):
     """
-    Generate a Busha Payment Request for an invoice.
-    Returns crypto deposit address, amount, and expiry.
+    Generate or retrieve a Busha payment request target for an invoice.
     Rate-limited to 10/min per IP.
     """
     try:
-        target = await InvoiceService.generate_payment_target(db=db, invoice_id=invoice_id, method=method)
-        return PaymentTargetResponse(**target)
+        target_info = await InvoiceService.create_payment_target(db=db, invoice_id=invoice_id, method=method)
+        return PaymentTargetResponse(**target_info)
     except PaymentTargetGenerationError as e:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))
     except HTTPException:

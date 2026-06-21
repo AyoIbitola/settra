@@ -15,8 +15,19 @@ function getAuthToken(): string | null {
 
 async function buildApiError(response: Response): Promise<ApiError> {
   const data = await response.json().catch(() => ({}));
+  
+  let msg = "An unexpected error occurred";
+  if (Array.isArray(data.detail)) {
+    // FastAPI validation error array
+    msg = data.detail.map((e: any) => `${e.loc?.join(".")}: ${e.msg}`).join(", ");
+  } else if (typeof data.detail === "string") {
+    msg = data.detail;
+  } else if (data.message) {
+    msg = data.message;
+  }
+
   return {
-    message: data.detail || data.message || "An unexpected error occurred",
+    message: msg,
     status: response.status,
     data,
   };
