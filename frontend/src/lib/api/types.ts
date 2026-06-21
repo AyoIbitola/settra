@@ -2,7 +2,7 @@ export type InvoiceStatus =
   | 'draft' | 'pending' | 'partially_paid' | 'paid'
   | 'overpaid' | 'expired' | 'cancelled' | 'refunded';
 
-export type PaymentMethod = 'btc_onchain' | 'lightning' | 'usdc' | 'usdt';
+export type PaymentMethod = 'btc_onchain' | 'btc' | 'usdc' | 'usdt';
 
 export interface Invoice {
   id: string;

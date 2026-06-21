@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { Card } from "../../components/ui/Card";
 import { StatusBadge } from "../../components/StatusBadge";
 import { HashReveal } from "../../components/HashReveal";
-import { getPublicInvoice, getPaymentMethods, createPaymentTarget, getPublicInvoiceStatus } from "../../lib/api/public";
+import { getPublicInvoice, getPaymentMethods, createPaymentTarget, getPublicInvoiceStatus, simulatePayment } from "../../lib/api/public";
 import { formatUSD } from "../../lib/decimal";
 import type { PublicInvoice, PaymentTarget, PublicInvoiceStatus, PaymentMethod } from "../../lib/api/types";
 import { Copy, Check, ArrowRight } from "lucide-react";
@@ -20,6 +20,7 @@ export default function Pay() {
   
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [simulating, setSimulating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -62,6 +63,22 @@ export default function Pay() {
       setError(err.message);
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleSimulatePayment = async () => {
+    if (!id || !target) return;
+    setSimulating(true);
+    setError(null);
+    try {
+      await simulatePayment(id, target.amount_expected_crypto);
+      // Let the status poll pick up the success state, or we could manually trigger it right now.
+      const newStatus = await getPublicInvoiceStatus(id);
+      setStatus(newStatus);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSimulating(false);
     }
   };
 
@@ -286,6 +303,24 @@ export default function Pay() {
                   <span className="text-[11px]">Payment address expires</span>
                 </div>
               )}
+
+              {/* DEMO: Simulate Payment Button */}
+              <div className="w-full pt-4">
+                <button
+                  onClick={handleSimulatePayment}
+                  disabled={simulating}
+                  className="w-full py-3 px-4 rounded-lg bg-white text-ink text-body-sm font-semibold hover:bg-silver transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {simulating ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-ink/20 border-t-ink rounded-full animate-spin" />
+                      <span>Verifying...</span>
+                    </>
+                  ) : (
+                    "I have paid"
+                  )}
+                </button>
+              </div>
             </div>
           )}
         </Card>

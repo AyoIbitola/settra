@@ -18,3 +18,9 @@ export async function createPaymentTarget(id: string, method: PaymentMethod): Pr
 export async function getPublicInvoiceStatus(id: string): Promise<PublicInvoiceStatus> {
   return apiRequest<PublicInvoiceStatus>(`/public/invoices/${id}/status`);
 }
+
+export async function simulatePayment(id: string, amountExpectedCrypto: string): Promise<{ status: string, tx_hash: string }> {
+  return apiRequest<{ status: string, tx_hash: string }>(`/public/invoices/${id}/simulate-payment?amount_expected_crypto=${amountExpectedCrypto}`, {
+    method: "POST",
+  });
+}

@@ -52,7 +52,7 @@ async def get_payment_methods(
     if not invoice:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found")
 
-    return ["usdc", "usdt", "btc", "lightning"]
+    return ["usdc", "usdt", "btc"]
 
 
 @router.post("/{invoice_id}/payment-target", response_model=PaymentTargetResponse)
@@ -72,6 +72,26 @@ async def create_payment_target(
         return PaymentTargetResponse(**target_info)
     except PaymentTargetGenerationError as e:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+@router.post("/{invoice_id}/simulate-payment")
+@limiter.limit("5/minute")
+async def simulate_payment(
+    request: Request,
+    invoice_id: uuid.UUID,
+    amount_expected_crypto: str = Query(..., description="The crypto amount to pretend was sent"),
+    db: AsyncSession = Depends(get_session),
+):
+    """
+    Simulate a successful payment for demo purposes.
+    Bypasses the webhook requirement and marks the invoice as paid.
+    """
+    try:
+        result = await InvoiceService.simulate_payment(db=db, invoice_id=invoice_id, amount_expected_crypto=amount_expected_crypto)
+        return result
     except HTTPException:
         raise
     except Exception as e:

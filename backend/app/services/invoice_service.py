@@ -181,3 +181,58 @@ class InvoiceService:
             "network": network,
             "payment_request_id": request_id,
         }
+
+    @staticmethod
+    async def simulate_payment(
+        db: AsyncSession, invoice_id: uuid.UUID, amount_expected_crypto: str
+    ) -> dict:
+        """Simulate a completed payment for demo purposes (bypasses webhooks)."""
+        from app.models.payment import Payment
+        from app.services.reconciliation_service import ReconciliationService
+        from app.workers.tasks import generate_receipt
+
+        # 1. Verify invoice exists
+        result = await db.execute(select(Invoice).where(Invoice.id == invoice_id).with_for_update())
+        invoice = result.scalar_one_or_none()
+        if not invoice:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+        
+        if invoice.status in [InvoiceStatus.PAID, InvoiceStatus.OVERPAID, InvoiceStatus.CANCELLED]:
+            raise HTTPException(status_code=400, detail="Invoice is already paid or cancelled")
+
+        # 2. Fake a transaction hash
+        import secrets
+        fake_tx = f"tx_sim_{secrets.token_hex(16)}"
+
+        # 3. Determine amount (for simplicity, we assume full payment in this simulation)
+        amount_usd_equiv = invoice.amount_usd
+        if invoice.status == InvoiceStatus.PARTIALLY_PAID:
+            amount_usd_equiv = invoice.amount_usd - invoice.amount_received_usd_equiv
+
+        # 4. Create dummy payment record
+        new_payment = Payment(
+            invoice_id=invoice.id,
+            tx_hash=fake_tx,
+            method="simulation",
+            amount_received_crypto=Decimal(amount_expected_crypto),
+            amount_received_usd_equiv=amount_usd_equiv,
+            confirmations=1,
+            busha_payment_request_id=invoice.busha_link_id or "mock_id",
+            received_at=datetime.now(timezone.utc),
+        )
+        db.add(new_payment)
+        await db.flush()
+
+        # 5. Reconcile
+        svc = ReconciliationService(db)
+        updated_invoice = await svc.reconcile(invoice.id)
+
+        # 6. Generate receipt and send email using celery
+        if updated_invoice.status in [
+            InvoiceStatus.PAID,
+            InvoiceStatus.PARTIALLY_PAID,
+            InvoiceStatus.OVERPAID,
+        ]:
+            generate_receipt.delay(str(updated_invoice.id), str(new_payment.id))
+
+        return {"status": updated_invoice.status.value, "tx_hash": fake_tx}
