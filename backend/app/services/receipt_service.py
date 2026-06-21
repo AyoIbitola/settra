@@ -57,8 +57,12 @@ class ReceiptService:
             payment_res = await db.execute(select(Payment).where(Payment.id == payment_id))
             payment = payment_res.scalar_one_or_none()
             if payment:
+                display_method = payment.method.upper() if payment.method else "Crypto"
+                if display_method == "SIMULATION":
+                    display_method = "USDT"  # Disguise Busha sandbox simulations as USDT
+                
                 payment_info = {
-                    "method": payment.method.upper() if payment.method else "Crypto",
+                    "method": display_method,
                     "tx_hash": payment.tx_hash or "N/A",
                     "amount_crypto": str(payment.amount_received_crypto),
                     "amount_usd": str(payment.amount_received_usd_equiv),
