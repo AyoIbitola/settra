@@ -58,9 +58,6 @@ class BushaClient:
             "quote_amount": float(quote_amount),
             "quote_currency": quote_currency,
             "target_currency": target_currency,
-            "require_extra_info": [
-                {"field_name": "email", "required": True}
-            ],
         }
         response = await self.client.post("/v1/payments/links", json=payload)
         await self._handle_response(response)
