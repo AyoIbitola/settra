@@ -2,25 +2,22 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Card } from "../../components/ui/Card";
 import { StatusBadge } from "../../components/StatusBadge";
-import { CountdownRing } from "../../components/CountdownRing";
 import { HashReveal } from "../../components/HashReveal";
-import { getPublicInvoice, getPaymentMethods, createPaymentTarget, getPublicInvoiceStatus } from "../../lib/api/public";
+import { getPublicInvoice, getPaymentMethods, getCheckoutLink, getPublicInvoiceStatus } from "../../lib/api/public";
 import { formatUSD } from "../../lib/decimal";
-import type { PublicInvoice, PaymentTarget, PublicInvoiceStatus, PaymentMethod } from "../../lib/api/types";
-import { Copy, Check, ArrowRight } from "lucide-react";
+import type { PublicInvoice, PublicInvoiceStatus, PaymentMethod } from "../../lib/api/types";
+import { ExternalLink, Check } from "lucide-react";
 import { Decimal } from "decimal.js";
-import { QRCodeSVG } from "qrcode.react";
 
 export default function Pay() {
   const { id } = useParams<{ id: string }>();
   const [invoice, setInvoice] = useState<PublicInvoice | null>(null);
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
-  const [target, setTarget] = useState<PaymentTarget | null>(null);
   const [status, setStatus] = useState<PublicInvoiceStatus | null>(null);
   
   const [loading, setLoading] = useState(true);
+  const [redirecting, setRedirecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   // Initial load
   useEffect(() => {
@@ -41,29 +38,30 @@ export default function Pay() {
 
   // Polling for status
   useEffect(() => {
-    if (!id || !target || status?.status === "paid" || status?.status === "expired" || status?.status === "cancelled") return;
+    if (!id || status?.status === "paid" || status?.status === "expired" || status?.status === "cancelled") return;
     
     const interval = setInterval(() => {
       getPublicInvoiceStatus(id).then(setStatus).catch(console.error);
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [id, target, status?.status]);
+  }, [id, status?.status]);
 
   const handleSelectMethod = async (method: PaymentMethod) => {
     if (!id) return;
+    setRedirecting(true);
+    setError(null);
     try {
-      const newTarget = await createPaymentTarget(id, method);
-      setTarget(newTarget);
+      const res = await getCheckoutLink(id, method);
+      if (res.checkout_url) {
+        window.location.href = res.checkout_url;
+      } else {
+        throw new Error("Checkout URL not returned from server.");
+      }
     } catch (err: any) {
       setError(err.message);
+      setRedirecting(false);
     }
-  };
-
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   if (loading) {
@@ -170,20 +168,24 @@ export default function Pay() {
             <p className="text-display-lg text-white">${formatUSD(amountPending)}</p>
           </div>
 
-          {!target ? (
-            // Form Selection
-            <div className="space-y-6 animate-fade-in">
-              <div className="space-y-2">
-                <h3 className="text-body-lg font-semibold text-white">Select a payment method</h3>
-                <p className="text-body-sm text-silver-dim">Choose how you'd like to pay</p>
-              </div>
+          <div className="space-y-6 animate-fade-in">
+            <div className="space-y-2">
+              <h3 className="text-body-lg font-semibold text-white">Select a payment method</h3>
+              <p className="text-body-sm text-silver-dim">Choose how you'd like to pay</p>
+            </div>
 
+            {redirecting ? (
+              <div className="flex flex-col items-center justify-center p-12 space-y-4">
+                <div className="w-6 h-6 border-2 border-silver-dim border-t-white rounded-full animate-spin" />
+                <p className="text-body-sm text-silver-dim">Redirecting to secure Busha checkout...</p>
+              </div>
+            ) : (
               <div className="grid grid-cols-1 gap-3">
                 {methods.map((method) => {
                   const label = method === "btc_onchain" ? "Bitcoin On-chain" :
                                 method === "lightning" ? "Lightning Network" :
-                                method === "usdc" ? "USDC (Polygon)" : 
-                                method === "usdt" ? "USDT (Tron)" : method;
+                                method === "usdc" ? "USDC" : 
+                                method === "usdt" ? "USDT" : method;
                   return (
                     <button
                       key={method}
@@ -191,70 +193,13 @@ export default function Pay() {
                       className="flex items-center justify-between p-4 rounded-lg border border-line bg-ink hover:bg-white/[0.02] hover:border-silver-dim transition-all text-left group"
                     >
                       <span className="text-body-sm font-medium text-white group-hover:text-white">{label}</span>
-                      <ArrowRight size={16} className="text-silver-dim group-hover:text-white transition-colors" />
+                      <ExternalLink size={16} className="text-silver-dim group-hover:text-white transition-colors" />
                     </button>
                   );
                 })}
               </div>
-            </div>
-          ) : (
-            // Target View
-            <div className="space-y-6 animate-fade-in flex flex-col items-center text-center">
-              <div className="flex justify-between w-full items-center">
-                <button 
-                  onClick={() => setTarget(null)} 
-                  className="text-body-sm text-silver-dim hover:text-white transition-colors text-left"
-                >
-                  ← Back
-                </button>
-                {status?.status === "pending" && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-silver-dim">AWAITING PAYMENT</span>
-                    <div className="w-1.5 h-1.5 rounded-full bg-amber animate-pulse" />
-                  </div>
-                )}
-              </div>
-
-              <div className="relative p-4 bg-white rounded-xl">
-                <QRCodeSVG 
-                  value={target.method === 'lightning' && !target.target_value.startsWith('lightning:') ? `lightning:${target.target_value}` : target.method === 'btc_onchain' && !target.target_value.startsWith('bitcoin:') ? `bitcoin:${target.target_value}?amount=${target.amount_expected_crypto}` : target.target_value} 
-                  size={200} 
-                  level="H"
-                  includeMargin={false}
-                />
-              </div>
-
-              <div className="space-y-1 w-full pt-4 border-t border-line">
-                <p className="text-[11px] text-silver-dim uppercase">Send exactly</p>
-                <div className="flex items-center justify-between p-3 rounded bg-ink border border-line">
-                  <span className="text-mono-sm text-white font-bold">{target.amount_expected_crypto} {target.method === 'lightning' || target.method === 'btc_onchain' ? 'BTC' : target.method.toUpperCase()}</span>
-                  <button onClick={() => handleCopy(target.amount_expected_crypto)} className="text-silver-dim hover:text-white transition-colors p-1">
-                    {copied ? <Check size={14} /> : <Copy size={14} />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-1 w-full">
-                <p className="text-[11px] text-silver-dim uppercase">To address</p>
-                <div className="flex items-center justify-between p-3 rounded bg-ink border border-line">
-                  <span className="text-[11px] font-mono text-white truncate max-w-[200px]">{target.target_value}</span>
-                  <button onClick={() => handleCopy(target.target_value)} className="text-silver-dim hover:text-white transition-colors p-1 shrink-0">
-                    <Copy size={14} />
-                  </button>
-                </div>
-              </div>
-
-              {target.expires_at && (
-                <div className="flex items-center gap-3 pt-6 text-silver-dim">
-                  <CountdownRing 
-                    expiresAt={target.expires_at} 
-                    onExpire={() => getPublicInvoiceStatus(id!).then(setStatus)} 
-                  />
-                  <span className="text-[11px]">Exchange rate locked</span>
-                </div>
-              )}
-            </div>
-          )}
+            )}
+          </div>
         </Card>
       </div>
     </div>
