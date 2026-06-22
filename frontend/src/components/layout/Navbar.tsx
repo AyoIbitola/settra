@@ -28,12 +28,6 @@ export function Navbar() {
           Settra
         </Link>
         
-        <div className="hidden md:flex items-center gap-8 text-body-sm font-medium text-silver hover:text-white transition-colors">
-          <a href="#how-it-works" className="hover:text-white transition-colors">How it works</a>
-          <Link to="/pricing" className="hover:text-white transition-colors">Pricing</Link>
-          <Link to="/docs" className="hover:text-white transition-colors">Docs</Link>
-        </div>
-
         <div className="flex items-center gap-4">
           <Link to="/login">
             <Button variant="ghost" size="sm">Sign in</Button>

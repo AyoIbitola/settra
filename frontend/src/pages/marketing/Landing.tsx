@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { Button } from "../../components/ui/Button";
 import { HeroInvoiceDemo } from "../../components/HeroInvoiceDemo";
 import { Card } from "../../components/ui/Card";
@@ -11,19 +12,17 @@ export default function Landing() {
           <div className="space-y-8 text-center lg:text-left">
             <h1 className="text-display-xl leading-tight">
               Invoice in dollars.<br />
-              Get paid in crypto.<br />
-              Reconcile automatically.
+              Get paid in crypto.
             </h1>
             <p className="text-body-lg text-silver max-w-xl">
               Lock a USD rate the moment your client opens the link. They pay with Bitcoin, Lightning, or a stablecoin — you get a cryptographic receipt either way.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-              <Button size="lg" variant="primary" className="bg-white text-ink hover:bg-silver transition-colors">
-                Get started
-              </Button>
-              <Button size="lg" variant="ghost">
-                See how it works
-              </Button>
+              <Link to="/login">
+                <Button size="lg" variant="primary" className="bg-white text-ink hover:bg-silver transition-colors">
+                  Get started
+                </Button>
+              </Link>
             </div>
           </div>
           
@@ -120,9 +119,11 @@ export default function Landing() {
       <section className="py-32 px-6 border-t border-line text-center bg-ink">
         <div className="max-w-xl mx-auto space-y-8">
           <h2 className="text-display-lg text-white">Get paid the way you actually want to</h2>
-          <Button size="lg" variant="primary" className="bg-white text-ink hover:bg-silver transition-colors">
-            Get started for free
-          </Button>
+          <Link to="/login">
+            <Button size="lg" variant="primary" className="bg-white text-ink hover:bg-silver transition-colors">
+              Get started for free
+            </Button>
+          </Link>
         </div>
       </section>
     </div>
