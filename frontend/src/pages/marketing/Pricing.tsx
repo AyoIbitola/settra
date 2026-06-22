@@ -1,11 +1,6 @@
-import { Navbar } from "../../components/layout/Navbar";
-import { Footer } from "../../components/layout/Footer";
-
 export default function Pricing() {
   return (
-    <div className="flex flex-col min-h-screen">
-      <Navbar />
-      <main className="flex-grow pt-32 pb-20 px-6 max-w-7xl mx-auto w-full text-center space-y-12">
+    <main className="flex-grow pt-32 pb-20 px-6 max-w-7xl mx-auto w-full text-center space-y-12">
         <h1 className="text-display-lg text-white">Simple, transparent pricing.</h1>
         <p className="text-body-lg text-silver max-w-2xl mx-auto">
           Settra is currently in early access. We charge a flat fee of 0.5% per processed invoice. No monthly subscriptions, no hidden gas fees for you.
@@ -34,7 +29,5 @@ export default function Pricing() {
            </div>
         </div>
       </main>
-      <Footer />
-    </div>
   );
 }

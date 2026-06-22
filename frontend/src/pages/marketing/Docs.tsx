@@ -1,11 +1,6 @@
-import { Navbar } from "../../components/layout/Navbar";
-import { Footer } from "../../components/layout/Footer";
-
 export default function Docs() {
   return (
-    <div className="flex flex-col min-h-screen">
-      <Navbar />
-      <main className="flex-grow pt-32 pb-20 px-6 max-w-4xl mx-auto w-full space-y-12">
+    <main className="flex-grow pt-32 pb-20 px-6 max-w-4xl mx-auto w-full space-y-12">
         <div className="space-y-4">
           <h1 className="text-display-lg text-white">Documentation</h1>
           <p className="text-body-lg text-silver">
@@ -36,7 +31,5 @@ export default function Docs() {
            <a href="mailto:support@settra.com" className="text-signal text-body-sm hover:underline">Contact Support</a>
         </div>
       </main>
-      <Footer />
-    </div>
   );
 }
